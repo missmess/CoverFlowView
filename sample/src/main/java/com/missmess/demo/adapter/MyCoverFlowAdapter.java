@@ -1,0 +1,77 @@
+package com.missmess.demo.adapter;
+
+import android.content.Context;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import com.missmess.coverflowview.ACoverFlowAdapter;
+import com.missmess.demo.R;
+
+/**
+ * @author wl
+ * @since 2016/07/28 16:52
+ */
+public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.ViewHolder> {
+    private int[] tipRess = {R.string.cover_tip0, R.string.cover_tip1, R.string.cover_tip2, R.string.cover_tip3, R.string.cover_tip4};
+
+    public void setTips(int[] tips) {
+        this.tipRess = tips;
+    }
+
+    @Override
+    public int getCount() {
+        return 5;
+    }
+
+    @Override
+    public ViewHolder onCreateViewHolder(ViewGroup parent, int type) {
+        View content;
+        if(type == 0) {
+            content = View.inflate(parent.getContext(), R.layout.item_coverflow1, new LinearLayout(parent.getContext()));
+            return new ViewHolder1(content);
+        } else if(type == 1) {
+            content = View.inflate(parent.getContext(), R.layout.item_coverflow2, new LinearLayout(parent.getContext()));
+            return new ViewHolder2(content);
+        }
+        return null;
+    }
+
+    @Override
+    public void onBindViewHolder(ACoverFlowAdapter.ViewHolder vh, int position) {
+        if(vh instanceof ViewHolder1) {
+            ViewHolder1 holder = (ViewHolder1) vh;
+            holder.textView.setText(tipRess[position]);
+        } else if(vh instanceof ViewHolder2) {
+            ViewHolder2 holder = (ViewHolder2) vh;
+            Context context = holder.textView2.getContext();
+            holder.textView2.setText(context.getString(R.string.circle, position));
+        }
+    }
+
+    @Override
+    public int getItemViewType(int position) {
+        if(position == 4)
+            return 1;
+        return 0;
+    }
+
+    class ViewHolder1 extends ACoverFlowAdapter.ViewHolder {
+        TextView textView;
+
+        public ViewHolder1(View itemView) {
+            super(itemView);
+            textView = (TextView) itemView.findViewById(R.id.textView);
+        }
+    }
+
+    class ViewHolder2 extends ACoverFlowAdapter.ViewHolder {
+        TextView textView2;
+
+        public ViewHolder2(View itemView) {
+            super(itemView);
+            textView2 = (TextView) itemView.findViewById(R.id.textView2);
+        }
+    }
+}

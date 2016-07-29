@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">CoverFlowView</string>
+    <string name="tips1">You can simply slide the CoverFlowView widget left or right to switch between your coverflow adapter views.
+    \n\nThese views will overlap when you show too many view at once or your view is large.
+    \n\nYou can Change total visible views in the layout xml (default value is 3).
+    \n\nYou can add a listener to handle a top view click, long click and view on top event.</string>
+    <string name="tips2">When set \"click to switch\" on, click the left or right edge will also switch the coverflow view
+    \n\nYou can also control to goto previous or next one in your code.</string>
+    <string name="tips3">When your data set has changed, you can just call adapter\'s notifyDataSetChanged() to get CoverFlowView refresh.
+    \nYou can also change a new adapter by setAdapter</string>
+    <string name="tips4">You can also goto specified views in one method, CoverFlowView will search the fast way to go to destination.
+        \nAlso, you can close the transition animation.</string>
+    
+    <string name="cover_tip0">Index 0\n\nWhen this view on top, checked TAB 1</string>
+    <string name="cover_tip1">Index 1</string>
+    <string name="cover_tip2">Index 2</string>
+    <string name="cover_tip3">Index 3</string>
+    <string name="cover_tip4">Index 4</string>
+    <string name="new_cover_tip0">New 0\n\nWhen this view on top, checked TAB 1</string>
+    <string name="new_cover_tip1">New 1</string>
+    <string name="new_cover_tip2">New 2</string>
+    <string name="new_cover_tip3">New 3</string>
+    <string name="new_cover_tip4">New 4</string>
+
+    <string name="circle">WeChat Circle\nIndex %d</string>
+</resources>
