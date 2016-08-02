@@ -7,6 +7,11 @@
   layout in CoverFlow, fix some bugs, add other function.
 
 ---
+  GIF预览：
+
+  ![gif](https://raw.githubusercontent.com/missmess/CoverFlowView/master/raw/sample.gif)
+
+---
 
   * [主要功能介绍](#主要功能介绍)
   * [如何添加到项目中](#如何添加到项目中)
@@ -44,7 +49,7 @@
 <com.missmess.coverflowview.CoverFlowView
     android:id="@+id/coverflow_view"
     android:layout_width="match_parent"
-	android:layout_height="180dp"
+    android:layout_height="180dp"
 	app:coverflowGravity="center_vertical"
 	app:coverflowLayoutMode="wrap_content"
 	app:visibleViews="3"/>
@@ -115,11 +120,6 @@ CoverFlowView提供三种lister：
 ---
 
 ###截图
-GIF:
-
-  ![gif](https://raw.githubusercontent.com/missmess/CoverFlowView/master/raw/screenshot_1.jpg)
-
-ScreenShots:
 
   ![image1](https://raw.githubusercontent.com/missmess/CoverFlowView/master/raw/screenshot_1.jpg)
   ![image2](https://raw.githubusercontent.com/missmess/CoverFlowView/master/raw/screenshot_2.jpg)
