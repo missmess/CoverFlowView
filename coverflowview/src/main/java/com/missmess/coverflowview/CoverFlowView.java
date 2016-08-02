@@ -6,7 +6,6 @@ import android.database.DataSetObserver;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -203,7 +202,7 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        Log.d("CoverFlowView", "onMeasure");
+//        Log.d("CoverFlowView", "onMeasure");
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (mAdapter == null || showViewArray.size() <= 0) {
@@ -310,7 +309,7 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        Log.d("CoverFlowView", "onLayout");
+//        Log.d("CoverFlowView", "onLayout");
         if (mAdapter == null || mAdapter.getCount() <= 0 || showViewArray.size() <= 0) {
             return;
         }
@@ -391,7 +390,7 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        Log.d("CoverFlowView", "onDraw");
+//        Log.d("CoverFlowView", "onDraw");
         final float offset = mOffset;
 
         if ((offset - (int) offset) == 0.0f) {
@@ -555,6 +554,8 @@ public class CoverFlowView extends RelativeLayout {
      * @return actual position
      */
     private int getActuallyPosition(int position) {
+        if(mAdapter == null)
+            return position;
         int max = mAdapter.getCount();
 
         position += VISIBLE_VIEWS;
@@ -989,9 +990,9 @@ public class CoverFlowView extends RelativeLayout {
         }
     }
 
-    private OnTopViewClickListner mTopViewClickLister;
+    private OnTopViewClickListener mTopViewClickLister;
     private OnViewOnTopListener mViewOnTopListener;
-    private OnTopViewLongClickListner mTopViewLongClickLister;
+    private OnTopViewLongClickListener mTopViewLongClickLister;
 
     public OnViewOnTopListener getOnViewOnTopListener() {
         return mViewOnTopListener;
@@ -1004,22 +1005,22 @@ public class CoverFlowView extends RelativeLayout {
     /**
      * 设置TopView的点击监听
      */
-    public void setOnTopViewClickListner(OnTopViewClickListner topViewClickLister) {
+    public void setOnTopViewClickListener(OnTopViewClickListener topViewClickLister) {
         this.mTopViewClickLister = topViewClickLister;
     }
 
-    public OnTopViewClickListner getOnTopViewClickListner() {
+    public OnTopViewClickListener getOnTopViewClickListener() {
         return this.mTopViewClickLister;
     }
 
     /**
      * 设置TopView的长点击监听
      */
-    public void setOnTopViewLongClickListner(OnTopViewLongClickListner topViewLongClickLister) {
+    public void setOnTopViewLongClickListener(OnTopViewLongClickListener topViewLongClickLister) {
         this.mTopViewLongClickLister = topViewLongClickLister;
     }
 
-    public OnTopViewLongClickListner getOnTopViewLongClickListner() {
+    public OnTopViewLongClickListener getOnTopViewLongClickListener() {
         return this.mTopViewLongClickLister;
     }
 
@@ -1030,13 +1031,13 @@ public class CoverFlowView extends RelativeLayout {
 
     }
 
-    public interface OnTopViewClickListner {
+    public interface OnTopViewClickListener {
 
         void onClick(int position, View itemView);
 
     }
 
-    public interface OnTopViewLongClickListner {
+    public interface OnTopViewLongClickListener {
 
         void onLongClick(int position, View itemView);
 

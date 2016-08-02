@@ -39,20 +39,22 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void viewOnTop(int position, View itemView) {
                 Log.d("viewOnTop", "position==" + position);
-                if(position == 0) {
+                if (adapter == null)
+                    return;
+                if (position == 0) {
                     vp.setCurrentItem(1);
-                } else if(position == 2) {
+                } else if (position == 2) {
                     adapter.animProgress(itemView);
                 }
             }
         });
-        coverflow_view.setOnTopViewClickListner(new CoverFlowView.OnTopViewClickListner() {
+        coverflow_view.setOnTopViewClickListener(new CoverFlowView.OnTopViewClickListener() {
             @Override
             public void onClick(int position, View itemView) {
                 Toast.makeText(MainActivity.this, "position " + position + " clicked", Toast.LENGTH_SHORT).show();
             }
         });
-        coverflow_view.setOnTopViewLongClickListner(new CoverFlowView.OnTopViewLongClickListner() {
+        coverflow_view.setOnTopViewLongClickListener(new CoverFlowView.OnTopViewLongClickListener() {
             @Override
             public void onLongClick(int position, View itemView) {
                 Toast.makeText(MainActivity.this, "position " + position + " long clicked", Toast.LENGTH_SHORT).show();
