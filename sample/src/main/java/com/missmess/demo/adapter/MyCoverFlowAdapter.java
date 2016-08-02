@@ -1,9 +1,11 @@
 package com.missmess.demo.adapter;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.missmess.coverflowview.ACoverFlowAdapter;
@@ -43,6 +45,13 @@ public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.View
         if(vh instanceof ViewHolder1) {
             ViewHolder1 holder = (ViewHolder1) vh;
             holder.textView.setText(tipRess[position]);
+            if(position == 2) {
+                holder.fl.setVisibility(View.VISIBLE);
+                holder.textView1.setText("0%");
+                holder.progressBar.setProgress(0);
+            } else {
+                holder.fl.setVisibility(View.GONE);
+            }
         } else if(vh instanceof ViewHolder2) {
             ViewHolder2 holder = (ViewHolder2) vh;
             Context context = holder.textView2.getContext();
@@ -57,12 +66,33 @@ public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.View
         return 0;
     }
 
+    public void animProgress(View itemView) {
+        final ViewHolder1 holder = (ViewHolder1) itemView.getTag();
+        ValueAnimator animator = ValueAnimator.ofInt(0, 100);
+        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                int va = (int) animation.getAnimatedValue();
+                holder.progressBar.setProgress(va);
+                holder.textView1.setText(String.format("%d%%", va));
+            }
+        });
+        animator.setDuration(500);
+        animator.start();
+    }
+
     class ViewHolder1 extends ACoverFlowAdapter.ViewHolder {
         TextView textView;
+        View fl;
+        TextView textView1;
+        ProgressBar progressBar;
 
         public ViewHolder1(View itemView) {
             super(itemView);
             textView = (TextView) itemView.findViewById(R.id.textView);
+            fl = itemView.findViewById(R.id.fl);
+            textView1 = (TextView) itemView.findViewById(R.id.textView1);
+            progressBar = (ProgressBar) itemView.findViewById(R.id.progressBar);
         }
     }
 

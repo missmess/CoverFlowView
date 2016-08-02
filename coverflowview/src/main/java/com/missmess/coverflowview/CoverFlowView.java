@@ -6,6 +6,7 @@ import android.database.DataSetObserver;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -177,7 +178,7 @@ public class CoverFlowView extends RelativeLayout {
 
         isFirstin = true;
         lastMid = 1;
-        isChange = true;
+        lastViewOnTopIndex = -1;
 
         // 一屏 显示的view数量
         int visibleCount = (VISIBLE_VIEWS << 1) + 1;
@@ -202,7 +203,7 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-//        Log.d("CoverFlowView", "onMeasure");
+        Log.d("CoverFlowView", "onMeasure");
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (mAdapter == null || showViewArray.size() <= 0) {
@@ -304,12 +305,12 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     boolean isFirstin = true; //第一次初始化该控件
-    int lastMid = 1;
-    boolean isChange = true;
+    int lastMid = 1; //最近的中间view的offset值
+    int lastViewOnTopIndex = -1; //最近处理过的viewOnTop监听的index
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-//        Log.d("CoverFlowView", "onLayout");
+        Log.d("CoverFlowView", "onLayout");
         if (mAdapter == null || mAdapter.getCount() <= 0 || showViewArray.size() <= 0) {
             return;
         }
@@ -345,8 +346,6 @@ public class CoverFlowView extends RelativeLayout {
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
                 midView.bringToFront();
-
-                isChange = true;
             } else if (lastMid - 1 == mid) { //左滑至item出现了
                 int actuallyPositionEnd = getActuallyPosition(lastMid + rightChild);
                 View view = showViewArray.get(actuallyPositionEnd);
@@ -368,8 +367,6 @@ public class CoverFlowView extends RelativeLayout {
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
                 midView.bringToFront();
-
-                isChange = true;
             }
         } else { //第一次进入
             isFirstin = false;
@@ -390,18 +387,20 @@ public class CoverFlowView extends RelativeLayout {
         for (i = endPos; i >= mid; i--) {
             layoutRightChild(i, i - offset);
         }
-
-        isChange = false;
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
-//        Log.d("CoverFlowView", "onDraw");
+        Log.d("CoverFlowView", "onDraw");
         final float offset = mOffset;
 
         if ((offset - (int) offset) == 0.0f) {
-            if (mViewOnTopListener != null)
-                mViewOnTopListener.viewOnTop(getActuallyPosition((int) offset), getTopView());
+            int top = getActuallyPosition((int) offset);
+            if(top != lastViewOnTopIndex) {
+                lastViewOnTopIndex = top;
+                if (mViewOnTopListener != null)
+                    mViewOnTopListener.viewOnTop(top, getTopView());
+            }
         }
         super.onDraw(canvas);
     }

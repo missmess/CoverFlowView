@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.support.design.widget.TabLayout;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -37,8 +38,11 @@ public class MainActivity extends AppCompatActivity {
         coverflow_view.setOnViewOnTopListener(new CoverFlowView.OnViewOnTopListener() {
             @Override
             public void viewOnTop(int position, View itemView) {
+                Log.d("viewOnTop", "position==" + position);
                 if(position == 0) {
                     vp.setCurrentItem(1);
+                } else if(position == 2) {
+                    adapter.animProgress(itemView);
                 }
             }
         });
