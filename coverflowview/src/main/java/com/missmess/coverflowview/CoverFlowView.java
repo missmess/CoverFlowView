@@ -108,10 +108,15 @@ public class CoverFlowView extends RelativeLayout {
                 R.styleable.CoverFlowView_visibleViews, 3);
         if (totalVisibleChildren % 2 == 0) { // 一屏幕必须是奇数显示
             throw new IllegalArgumentException(
-                    "visible image must be an odd number");
+                    "visible views must be an odd number");
+        }
+        if(totalVisibleChildren < 3) {
+            throw new IllegalArgumentException(
+                    "visible views must be a number greater than 3");
         }
 
         VISIBLE_VIEWS = totalVisibleChildren >> 1; // 计算出左右两两边的显示个数
+        mVisibleChildCount = totalVisibleChildren;
 
 //        reflectHeightFraction = a.getFraction(
 //                R.styleable.CoverFlowView_reflectionHeight, 100, 0, 0.0f);
@@ -179,15 +184,13 @@ public class CoverFlowView extends RelativeLayout {
         lastMid = 1;
         lastViewOnTopIndex = -1;
 
-        // 一屏 显示的view数量
-        int visibleCount = (VISIBLE_VIEWS << 1) + 1;
-
-        for (int i = 0, j = (midIndex - VISIBLE_VIEWS); i < visibleCount && mAdapter != null && i < mAdapter.getCount(); ++i, ++j) {
+        for (int i = 0, j = (midIndex - VISIBLE_VIEWS); i < mVisibleChildCount && mAdapter != null && i < mAdapter.getCount(); ++i, ++j) {
             View convertView = null;
             if (removeViewArray.size() > 0) {
                 convertView = removeViewArray.remove(0);
             }
-            int index = j < 0 ? mAdapter.getCount() + j : j;
+            int count = mAdapter.getCount();
+            int index = j < 0 ? count + j : (j >= count ? j - count : j);
             View view = mAdapter.getView(index, convertView, this);
             showViewArray.put(index, view);
 
@@ -218,14 +221,11 @@ public class CoverFlowView extends RelativeLayout {
         int widthSize = MeasureSpec.getSize(widthMeasureSpec);
         int heightSize = MeasureSpec.getSize(heightMeasureSpec);
 
-        // 一屏 显示的图片数量
-        int visibleCount = (VISIBLE_VIEWS << 1) + 1;
-
         // 控件高度
         int avaiblableHeight = heightSize - paddingTop - paddingBottom;
 
         int maxChildTotalHeight = 0;
-        for (int i = 0; i < getChildCount() && i < visibleCount && i < showViewArray.size(); ++i) {
+        for (int i = 0; i < getChildCount() && i < mVisibleChildCount && i < showViewArray.size(); ++i) {
 
 //			View view = showViewArray.get(i+firstIndex);
             View view = getChildAt(i);
@@ -299,7 +299,6 @@ public class CoverFlowView extends RelativeLayout {
 //				* reflectHeightFraction);
 
         setMeasuredDimension(widthSize, heightSize);
-        mVisibleChildCount = visibleCount;
         mWidth = widthSize;
     }
 
@@ -575,6 +574,9 @@ public class CoverFlowView extends RelativeLayout {
             mAdapter.unregisterDataSetObserver(mDataSetObserver);
         }
 
+        if(adapter.getCount() < mVisibleChildCount) {
+            throw new IllegalArgumentException("adapter's count must be greater than visible views number");
+        }
         mAdapter = adapter;
         initChildren(VISIBLE_VIEWS);
 
@@ -1046,7 +1048,7 @@ public class CoverFlowView extends RelativeLayout {
     class AdapterDataSetObserver extends DataSetObserver {
         @Override
         public void onChanged() { //数据改变了，更新child的数据
-            int visibleCount = (VISIBLE_VIEWS << 1) + 1;
+            int visibleCount = mVisibleChildCount;
 
             int mid = lastMid;
             //右边孩子的数量
