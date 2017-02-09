@@ -181,7 +181,7 @@ public class CoverFlowView extends RelativeLayout {
 //        mLastOffset = -1;
 
         isFirstin = true;
-        lastMid = 1;
+        lastMid = 0;
         lastViewOnTopIndex = -1;
 
         for (int i = 0, j = (midIndex - VISIBLE_VIEWS); i < mVisibleChildCount && mAdapter != null && i < mAdapter.getCount(); ++i, ++j) {
@@ -303,7 +303,7 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     boolean isFirstin = true; //第一次初始化该控件
-    int lastMid = 1; //最近的中间view的offset值
+    int lastMid = 0; //最近的中间view的offset值
     int lastViewOnTopIndex = -1; //最近处理过的viewOnTop监听的index
 
     @Override
