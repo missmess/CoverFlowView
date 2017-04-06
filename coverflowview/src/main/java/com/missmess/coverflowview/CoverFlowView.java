@@ -339,7 +339,7 @@ public class CoverFlowView extends RelativeLayout {
                 View viewItem = mAdapter.getView(actuallyPositionEnd, convertView, this);
 
                 showViewArray.put(actuallyPositionEnd, viewItem);
-                addView(viewItem);
+                addView(viewItem, 0);
 
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
