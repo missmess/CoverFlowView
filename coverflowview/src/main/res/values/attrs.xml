@@ -3,6 +3,7 @@
 
     <declare-styleable name="CoverFlowView">
         <attr name="visibleViews" format="integer" />
+        <attr name="loopMode" format="boolean" />
         <!--<attr name="reflectionHeight" format="fraction" />-->
         <!--<attr name="reflectionGap" format="dimension" />-->
         <!--<attr name="topImageClickEnable" format="boolean" />-->

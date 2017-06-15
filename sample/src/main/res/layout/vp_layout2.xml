@@ -53,5 +53,22 @@
 
         </LinearLayout>
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/tips_loop"
+            android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+        <Switch
+            android:id="@+id/switch2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:checked="true"
+            android:switchPadding="10dp"
+            android:text="Loop Mode"
+            android:textColor="@color/color_orange"/>
+
     </LinearLayout>
 </android.support.v4.widget.NestedScrollView>

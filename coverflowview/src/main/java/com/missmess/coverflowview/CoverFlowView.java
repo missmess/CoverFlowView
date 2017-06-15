@@ -24,6 +24,7 @@ import java.util.ArrayList;
 
 public class CoverFlowView extends RelativeLayout {
     private AdapterDataSetObserver mDataSetObserver;
+    private boolean mLoopMode;
 
     public enum CoverFlowGravity {
         TOP, BOTTOM, CENTER_VERTICAL
@@ -128,6 +129,8 @@ public class CoverFlowView extends RelativeLayout {
 //        reflectGap = a.getDimensionPixelSize(
 //                R.styleable.CoverFlowView_reflectionGap, 0);
 
+        mLoopMode = a.getBoolean(R.styleable.CoverFlowView_loopMode, true);
+
         mGravity = CoverFlowGravity.values()[a.getInt(
                 R.styleable.CoverFlowView_coverflowGravity,
                 CoverFlowGravity.CENTER_VERTICAL.ordinal())];
@@ -177,7 +180,8 @@ public class CoverFlowView extends RelativeLayout {
         removeViewArray.clear();
 
         mChildHeight = 0;
-        mOffset = midIndex - VISIBLE_VIEWS;
+        int mid = midIndex - VISIBLE_VIEWS;
+        mOffset = mid;
 //        mLastOffset = -1;
 
         isFirstin = true;
@@ -190,15 +194,32 @@ public class CoverFlowView extends RelativeLayout {
                 convertView = removeViewArray.remove(0);
             }
             int count = mAdapter.getCount();
-            int index = j < 0 ? count + j : (j >= count ? j - count : j);
-            View view = mAdapter.getView(index, convertView, this);
-            showViewArray.put(index, view);
-
-            //按Z轴顺序添加view，保持层叠效果
-            if (i < VISIBLE_VIEWS) {
-                addView(view);
+            int index = 0;
+            View view = null;
+            if(j < 0) {
+                if(mLoopMode) {
+                    index = count + j;
+                    view = mAdapter.getView(index, convertView, this);
+                }
+            } else if(j >= count) {
+                if(mLoopMode) {
+                    index = j - count;
+                    view = mAdapter.getView(index, convertView, this);
+                }
             } else {
-                addView(view, VISIBLE_VIEWS);
+                index = j;
+                view = mAdapter.getView(index, convertView, this);
+            }
+
+            if(view != null) {
+                showViewArray.put(index, view);
+
+                //按Z轴顺序添加view，保持层叠效果
+                if (i <= VISIBLE_VIEWS) {
+                    addView(view);
+                } else {
+                    addView(view, 0);
+                }
             }
         }
     }
@@ -334,12 +355,14 @@ public class CoverFlowView extends RelativeLayout {
                 if (removeViewArray.size() > 0) {
                     convertView = removeViewArray.remove(0);
                 }
-                int actuallyPositionEnd = getActuallyPosition(mid + rightChild);
 
-                View viewItem = mAdapter.getView(actuallyPositionEnd, convertView, this);
-
-                showViewArray.put(actuallyPositionEnd, viewItem);
-                addView(viewItem, 0);
+                boolean avail = mid < (mAdapter.getCount() - VISIBLE_VIEWS - 1) - 1;
+                if(mLoopMode || avail) {
+                    int actuallyPositionEnd = getActuallyPosition(mid + rightChild);
+                    View viewItem = mAdapter.getView(actuallyPositionEnd, convertView, this);
+                    showViewArray.put(actuallyPositionEnd, viewItem);
+                    addView(viewItem, 0);
+                }
 
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
@@ -355,12 +378,14 @@ public class CoverFlowView extends RelativeLayout {
                 if (removeViewArray.size() > 0) {
                     convertView = removeViewArray.remove(0);
                 }
-                int actuallyPositionstart = getActuallyPosition(mid - leftChild);
 
-                View viewItem = mAdapter.getView(actuallyPositionstart, convertView, this);
-
-                showViewArray.put(actuallyPositionstart, viewItem);
-                addView(viewItem, 0);
+                boolean avail = mid > - 1;
+                if(mLoopMode || avail) {
+                    int actuallyPositionstart = getActuallyPosition(mid - leftChild);
+                    View viewItem = mAdapter.getView(actuallyPositionstart, convertView, this);
+                    showViewArray.put(actuallyPositionstart, viewItem);
+                    addView(viewItem, 0);
+                }
 
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
@@ -757,7 +782,7 @@ public class CoverFlowView extends RelativeLayout {
 
     private void endAnimation() {
         if (mAnimationRunnable != null) {
-            mOffset = (float) Math.floor(mOffset + 0.5);
+            attemptSetOffset((float) Math.floor(mOffset + 0.5));
 
             invalidate();
             requestLayout();
@@ -779,7 +804,7 @@ public class CoverFlowView extends RelativeLayout {
             mTouchMoved = true;
         }
 
-        mOffset = mStartOffset + mTouchStartPos - pos;
+        attemptSetOffset(mStartOffset + mTouchStartPos - pos);
 
         invalidate();
         requestLayout();
@@ -792,7 +817,7 @@ public class CoverFlowView extends RelativeLayout {
 
         if (mTouchMoved || (mOffset - Math.floor(mOffset)) != 0) {
             mStartOffset += mTouchStartPos - pos;
-            mOffset = mStartOffset;
+            attemptSetOffset(mStartOffset);
 
             mVelocity.addMovement(event);
 
@@ -869,7 +894,7 @@ public class CoverFlowView extends RelativeLayout {
         if (mStartSpeed < 0)
             delta = -delta;
 
-        mOffset = mStartOffset + delta;
+        attemptSetOffset(mStartOffset + delta);
         invalidate();
         requestLayout();
     }
@@ -882,10 +907,23 @@ public class CoverFlowView extends RelativeLayout {
         if (mScroller.computeScrollOffset()) {
             final int currX = mScroller.getCurrX();
 
-            mOffset = (float) currX / 100;
+            attemptSetOffset((float) currX / 100);
 
             invalidate();
         }
+    }
+
+    private void attemptSetOffset(float offset) {
+        if(!mLoopMode) {
+            int start = -VISIBLE_VIEWS;
+            int end = mAdapter.getCount() - VISIBLE_VIEWS - 1;
+            if (offset < start) {
+                offset = start;
+            } else if (offset > end) {
+                offset = end;
+            }
+        }
+        mOffset = offset;
     }
 
     private boolean clickSwitchEnable = true;
@@ -895,6 +933,16 @@ public class CoverFlowView extends RelativeLayout {
      */
     public void setClick2SwitchEnabled(boolean enabled) {
         clickSwitchEnable = enabled;
+    }
+
+    public void setLoopMode(boolean loop) {
+        if (isOnAnimator || onTouchMove) { //如果正在执行点击切换动画 或者 正在执行触摸移动
+            return;
+        }
+
+        this.mLoopMode = loop;
+        int mid = (int) Math.floor(mOffset + 0.5);
+        initChildren(getActuallyPosition(mid));
     }
 
     private boolean isOnAnimator = false; //是否正在进行点击切换动画
@@ -928,7 +976,7 @@ public class CoverFlowView extends RelativeLayout {
 
             @Override
             public void onAnimationUpdate(ValueAnimator animation) {
-                mOffset = (Float) animation.getAnimatedValue();
+                attemptSetOffset((Float) animation.getAnimatedValue());
 
 //				System.out.println("##################3  mOffset : " + mOffset);
 
@@ -977,13 +1025,18 @@ public class CoverFlowView extends RelativeLayout {
             float offset = mOffset;
             int curPos = getActuallyPosition((int) offset);
 
+            int minDistance;
             //求出当前位置到达selection位置的最短路径
             int distance1 = selection - curPos;
-            int distance2 = selection + count - curPos;
-            int distance3 = selection - count - curPos;
 
-            int minDistance = Math.abs(distance1) < Math.abs(distance2) ? distance1 : distance2;
-            minDistance = Math.abs(minDistance) < Math.abs(distance3) ? minDistance : distance3;
+            if(mLoopMode) {
+                int distance2 = selection + count - curPos;
+                int distance3 = selection - count - curPos;
+                minDistance = Math.abs(distance1) < Math.abs(distance2) ? distance1 : distance2;
+                minDistance = Math.abs(minDistance) < Math.abs(distance3) ? minDistance : distance3;
+            } else {
+                minDistance = distance1;
+            }
 
             doAnimator(minDistance);
         } else {
@@ -1063,7 +1116,8 @@ public class CoverFlowView extends RelativeLayout {
             for (int i = startPos; i <= endPos; i++) {
                 int actuallyPosition = getActuallyPosition(i);
                 View view = showViewArray.get(actuallyPosition);
-                mAdapter.refreshView(view, actuallyPosition);
+                if(view != null)
+                    mAdapter.refreshView(view, actuallyPosition);
             }
         }
     }

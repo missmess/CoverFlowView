@@ -36,7 +36,7 @@
 本library已经支持Gradle直接添加远程依赖。Android Studio用户，只需要在项目的build.gradle中添加该dependencies：
 
   `
-    compile "com.missmess.coverflowview:coverflowview:1.0.5"
+    compile "com.missmess.coverflowview:coverflowview:1.0.9"
   `
 
 ---
@@ -50,8 +50,7 @@
     android:id="@+id/coverflow_view"
     android:layout_width="match_parent"
     android:layout_height="180dp"
-	app:coverflowGravity="center_vertical"
-	app:coverflowLayoutMode="wrap_content"
+    app:loopMode="true"
 	app:visibleViews="3"/>
 ```
 ######2、创建adapter。继承于ACoverFlowAdapter。adapter的实现与RecyclerView.Adapter完全相同。
@@ -117,6 +116,13 @@ CoverFlowView提供三种lister：
 * setOnTopViewClickListener：当位于顶部的view被点击后调用。
 * setOnTopViewLongClickListener：当位于顶部的view接收了long click事件时调用。
 
+
+######4、循环模式
+使用setLoopMode(boolean)方法或者在xml中定义loopMode来启用和关闭循环模式。
+在循环模式下，将可以无限向左和向右滑动，item将会循环显示。关闭后，滑动到第一个或者最后一个item，将
+不能继续向左或向右滑动。
+
+
 ---
 
 ###截图
@@ -130,8 +136,7 @@ CoverFlowView提供三种lister：
 ###关于作者
 在使用中有任何问题，欢迎反馈给我，可以用以下联系方式跟我交流：
 
-* QQ: 478271233
-* 邮箱：<478271233@qq.com>
+* 邮箱：<tarcy3620@126.com>
 * GitHub: [@missmess](https://github.com/missmess)
 
 ---

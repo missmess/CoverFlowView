@@ -6,6 +6,7 @@
     \n\nYou can add a listener to handle a top view click, long click and view on top event.</string>
     <string name="tips2">When set \"click to switch\" on, click the left or right edge will also switch the coverflow view
     \n\nYou can also control to goto previous or next one in your code.</string>
+    <string name="tips_loop">When in LoopMode, we can scroll left and right infinitely.</string>
     <string name="tips3">When your data set has changed, you can just call adapter\'s notifyDataSetChanged() to get CoverFlowView refresh.
     \nYou can also change a new adapter by setAdapter</string>
     <string name="tips4">You can also goto specified views in one method, CoverFlowView will search the fast way to go to destination.
