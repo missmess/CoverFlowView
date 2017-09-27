@@ -174,6 +174,8 @@ public class CoverFlowView extends RelativeLayout {
      * @param midIndex 指定最中间的view的index。
      */
     private void initChildren(int midIndex) {
+        // 必须先停止正在进行的滑动动画
+        endAnimation();
         removeAllViews();
 
         showViewArray.clear();
@@ -1100,25 +1102,9 @@ public class CoverFlowView extends RelativeLayout {
 
     class AdapterDataSetObserver extends DataSetObserver {
         @Override
-        public void onChanged() { //数据改变了，更新child的数据
-            int visibleCount = mVisibleChildCount;
-
-            int mid = lastMid;
-            //右边孩子的数量
-            int rightChild = (visibleCount % 2 == 0) ? (visibleCount >> 1) - 1
-                    : visibleCount >> 1;
-            //左边孩子的数量
-            int leftChild = visibleCount >> 1;
-
-            int startPos = mid - leftChild;
-            int endPos = mid + rightChild;
-
-            for (int i = startPos; i <= endPos; i++) {
-                int actuallyPosition = getActuallyPosition(i);
-                View view = showViewArray.get(actuallyPosition);
-                if(view != null)
-                    mAdapter.refreshView(view, actuallyPosition);
-            }
+        public void onChanged() { //数据改变了，直接重新添加children
+            int mid = (int) Math.floor(mOffset + 0.5);
+            initChildren(getActuallyPosition(mid));
         }
     }
 }

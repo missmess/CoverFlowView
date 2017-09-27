@@ -24,7 +24,7 @@ public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.View
 
     @Override
     public int getCount() {
-        return 5;
+        return tipRess.length;
     }
 
     @Override

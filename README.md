@@ -36,7 +36,7 @@
 本library已经支持Gradle直接添加远程依赖。Android Studio用户，只需要在项目的build.gradle中添加该dependencies：
 
   `
-    compile "com.missmess.coverflowview:coverflowview:1.0.9"
+    compile "com.missmess.coverflowview:coverflowview:1.1.0"
   `
 
 ---
