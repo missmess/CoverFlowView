@@ -13,7 +13,6 @@ import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AnimationUtils;
 import android.widget.RelativeLayout;
-import android.widget.Scroller;
 
 import com.nineoldandroids.animation.Animator;
 import com.nineoldandroids.animation.ValueAnimator;
@@ -25,6 +24,7 @@ import java.util.ArrayList;
 public class CoverFlowView extends RelativeLayout {
     private AdapterDataSetObserver mDataSetObserver;
     private boolean mLoopMode;
+    private ValueAnimator mAnimator;
 
     public enum CoverFlowGravity {
         TOP, BOTTOM, CENTER_VERTICAL
@@ -38,7 +38,7 @@ public class CoverFlowView extends RelativeLayout {
 
     protected CoverFlowLayoutMode mLayoutMode;
 
-    private Scroller mScroller;
+//    private Scroller mScroller;
     /**
      * To store reflections need to remove
      */
@@ -146,9 +146,9 @@ public class CoverFlowView extends RelativeLayout {
         setWillNotDraw(false);
         setClickable(true);
 
-        if (mScroller == null) {
-            mScroller = new Scroller(getContext(), new AccelerateDecelerateInterpolator());
-        }
+//        if (mScroller == null) {
+//            mScroller = new Scroller(getContext(), new AccelerateDecelerateInterpolator());
+//        }
         if (showViewArray == null) {
             showViewArray = new SparseArray<>();
         }
@@ -176,6 +176,14 @@ public class CoverFlowView extends RelativeLayout {
     private void initChildren(int midIndex) {
         // 必须先停止正在进行的滑动动画
         endAnimation();
+        // 停止setSelection的动画
+        if (mAnimator != null)
+            mAnimator.cancel();
+        // 停止接收触摸事件
+        onTouchMove = false;
+        // 停止long click动作
+        removeLongClickAction();
+        // 移除所有view
         removeAllViews();
 
         showViewArray.clear();
@@ -640,11 +648,11 @@ public class CoverFlowView extends RelativeLayout {
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 onTouchMove = true;
-                if (mScroller.computeScrollOffset()) {
-                    mScroller.abortAnimation();
-                    invalidate();
-                    requestLayout();
-                }
+//                if (mScroller.computeScrollOffset()) {
+//                    mScroller.abortAnimation();
+//                    invalidate();
+//                    requestLayout();
+//                }
                 touchBegan(event);
                 touchViewItem = getTopView();
                 isOnTopView = inRangeOfView(touchViewItem, event);
@@ -654,7 +662,11 @@ public class CoverFlowView extends RelativeLayout {
                     sendLongClickAction();
                 }
                 return true;
+            case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_MOVE:
+                if (!onTouchMove) //不再进行触摸移动处理
+                    return false;
+
                 touchMoved(event);
 
                 if (Math.abs(downX - event.getX()) >= 10
@@ -666,6 +678,9 @@ public class CoverFlowView extends RelativeLayout {
 
                 return true;
             case MotionEvent.ACTION_UP:
+                if (!onTouchMove) //不再进行触摸终止逻辑
+                    return false;
+
                 removeLongClickAction();
                 if (isOnTopView && touchViewItem == getTopView()
                         && inRangeOfView(touchViewItem, event)) {
@@ -901,21 +916,23 @@ public class CoverFlowView extends RelativeLayout {
         requestLayout();
     }
 
-    @Override
-    public void computeScroll() {
-        super.computeScroll();
-
-//        算出移动到某一个虚拟点时  mOffset的值  然后invalidate 重绘
-        if (mScroller.computeScrollOffset()) {
-            final int currX = mScroller.getCurrX();
-
-            attemptSetOffset((float) currX / 100);
-
-            invalidate();
-        }
-    }
+//    @Override
+//    public void computeScroll() {
+//        super.computeScroll();
+//
+////        算出移动到某一个虚拟点时  mOffset的值  然后invalidate 重绘
+//        if (mScroller.computeScrollOffset()) {
+//            final int currX = mScroller.getCurrX();
+//
+//            Log.i("CoverFlowView", "computeScroll");
+//            attemptSetOffset((float) currX / 100);
+//
+//            invalidate();
+//        }
+//    }
 
     private void attemptSetOffset(float offset) {
+        float old = mOffset;
         if(!mLoopMode) {
             int start = -VISIBLE_VIEWS;
             int end = mAdapter.getCount() - VISIBLE_VIEWS - 1;
@@ -980,8 +997,6 @@ public class CoverFlowView extends RelativeLayout {
             public void onAnimationUpdate(ValueAnimator animation) {
                 attemptSetOffset((Float) animation.getAnimatedValue());
 
-//				System.out.println("##################3  mOffset : " + mOffset);
-
                 invalidate();
                 requestLayout();
             }
@@ -993,6 +1008,7 @@ public class CoverFlowView extends RelativeLayout {
 
             @Override
             public void onAnimationCancel(Animator animation) {
+                isOnAnimator = false;
             }
 
             @Override
@@ -1004,6 +1020,7 @@ public class CoverFlowView extends RelativeLayout {
                 isOnAnimator = false;
             }
         });
+        mAnimator = animator;
     }
 
     /**
