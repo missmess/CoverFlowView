@@ -21,6 +21,29 @@ import com.nineoldandroids.view.ViewHelper;
 
 import java.util.ArrayList;
 
+/**
+ * 将一组view以CoverFlow效果展示出来。
+ *
+ * <p>原理：假设一屏可显示的view数目为totalVis = 2 * vis + 1（始终为奇数）。左右两边最多显示vis个
+ * view。adapter的个数为count;
+ * <ol>
+ *     <li>adapter中的item将按顺序排列在CoverFlowView中。初始显示的一组view为adapter中position为
+ *     0~totalVis的item，并且最中间的view设index = 0，即index=0对应position=vis。
+ *     参考 {@link #getActuallyPosition(int)}</li>
+ *     <li>index从左到右增大。在loop模式下，index没有取值范围。在非loop模式，index取值范围
+ *     为[-vis, count-vis-1]</li>
+ *     <li>内部使用{@link #showViewArray}存储正显示在CoverFlowView上的item。这个map以
+ *     adapter position作为key存储view</li>
+ *     <li>CoverFlowView通过{@link #addView(View, int)}的index order来控制CoverFlow的层叠效果。
+ *     最中间的view的index order最大，越往两边index order越小。</li>
+ *     <li>CoverFlowView发生任何移动时{@link #mOffset}都会改变，代表偏移量（浮点数）。滑动停止时，
+ *     {@link #mOffset}=index</li>
+ *     <li>每当滑动到两个view之间的一半时，将会移除一个边界view（往左滑移除右边界）和获取一个新的
+ *     显示view，并且调整view的index order以保持正确的层叠效果，参见{@link #onLayout(boolean, int, int, int, int)}</li>
+ * </ol>
+ * </p>
+ *
+ */
 public class CoverFlowView extends RelativeLayout {
     private AdapterDataSetObserver mDataSetObserver;
     private boolean mLoopMode;
@@ -366,7 +389,8 @@ public class CoverFlowView extends RelativeLayout {
                     convertView = removeViewArray.remove(0);
                 }
 
-                boolean avail = mid < (mAdapter.getCount() - VISIBLE_VIEWS - 1) - 1;
+                // 非loop模式下，index<=count-vis-1。所以mid<=count-vis-1-vis
+                boolean avail = mid <= (mAdapter.getCount() - VISIBLE_VIEWS - 1) - VISIBLE_VIEWS;
                 if(mLoopMode || avail) {
                     int actuallyPositionEnd = getActuallyPosition(mid + rightChild);
                     View viewItem = mAdapter.getView(actuallyPositionEnd, convertView, this);
@@ -389,7 +413,8 @@ public class CoverFlowView extends RelativeLayout {
                     convertView = removeViewArray.remove(0);
                 }
 
-                boolean avail = mid > - 1;
+                // 非loop模式下，index>=-vis。所以mid>=-vis+vis
+                boolean avail = mid >= 0;
                 if(mLoopMode || avail) {
                     int actuallyPositionstart = getActuallyPosition(mid - leftChild);
                     View viewItem = mAdapter.getView(actuallyPositionstart, convertView, this);
@@ -582,22 +607,22 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     /**
-     * Convert draw-index to index in adapter
+     * Convert our index to adapter position.
      *
-     * @param position position to draw
-     * @return actual position
+     * @param index index in CoverFlowView
+     * @return adapter position
      */
-    private int getActuallyPosition(int position) {
+    private int getActuallyPosition(int index) {
         if(mAdapter == null)
-            return position;
-        int max = mAdapter.getCount();
+            return index;
+        int count = mAdapter.getCount();
 
-        position += VISIBLE_VIEWS;
-        while (position < 0 || position >= max) {
+        int position = index + VISIBLE_VIEWS;
+        while (position < 0 || position >= count) {
             if (position < 0) {
-                position += max;
-            } else if (position >= max) {
-                position -= max;
+                position += count;
+            } else if (position >= count) {
+                position -= count;
             }
         }
 
