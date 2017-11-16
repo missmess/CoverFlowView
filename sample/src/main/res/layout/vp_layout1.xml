@@ -11,9 +11,47 @@
         android:orientation="vertical"
         android:padding="10dp">
 
+        <Button
+            android:id="@+id/button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:onClick="vp1Clicker"
+            android:text="increase padding"/>
+
+        <Button
+            android:id="@+id/button2"
+            android:layout_width="wrap_content"
+            android:layout_marginTop="10dp"
+            android:layout_height="wrap_content"
+            android:onClick="vp1Clicker"
+            android:text="decrease padding"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="scale ratio"
+                android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+            <SeekBar
+                android:id="@+id/seek_bar"
+                android:max="100"
+                android:progress="25"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"/>
+        </LinearLayout>
+
         <TextView
             android:id="@+id/textView"
             android:layout_width="wrap_content"
+            android:layout_marginTop="30dp"
             android:layout_height="wrap_content"
             android:text="@string/tips1"
             android:textAppearance="?android:attr/textAppearanceMedium"/>

@@ -65,6 +65,32 @@ public class MainActivity extends AppCompatActivity {
         tabl.setupWithViewPager(vp);
     }
 
+    public void vp1Clicker(View v) {
+        int paddingTop = coverflow_view.getPaddingTop();
+        int paddingBottom = coverflow_view.getPaddingBottom();
+        int paddingLeft = coverflow_view.getPaddingLeft();
+        int paddingRight = coverflow_view.getPaddingRight();
+        int maxPadding = 250;
+        int minPadding = -300;
+        int stepPadding = 50;
+        switch (v.getId()) {
+            case R.id.button:
+                paddingLeft += stepPadding;
+                paddingLeft = Math.min(maxPadding, Math.max(minPadding, paddingLeft));
+                paddingRight += stepPadding;
+                paddingRight = Math.min(maxPadding, Math.max(minPadding, paddingRight));
+                coverflow_view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+                break;
+            case R.id.button2:
+                paddingLeft -= stepPadding;
+                paddingLeft = Math.min(maxPadding, Math.max(minPadding, paddingLeft));
+                paddingRight -= stepPadding;
+                paddingRight = Math.min(maxPadding, Math.max(minPadding, paddingRight));
+                coverflow_view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+                break;
+        }
+    }
+
     public void vp2Clicker(View v) {
         switch (v.getId()) {
             case R.id.button:

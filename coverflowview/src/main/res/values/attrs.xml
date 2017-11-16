@@ -16,6 +16,7 @@
             <enum name="match_parent" value="0"/>
             <enum name="wrap_content" value="1"/>
         </attr>
+        <attr name="scaleRatio" format="fraction" />
     </declare-styleable>
 
 </resources>

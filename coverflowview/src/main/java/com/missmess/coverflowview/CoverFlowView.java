@@ -38,7 +38,7 @@ import java.util.ArrayList;
  *     最中间的view的index order最大，越往两边index order越小。</li>
  *     <li>CoverFlowView发生任何移动时{@link #mOffset}都会改变，代表偏移量（浮点数）。滑动停止时，
  *     {@link #mOffset}=index</li>
- *     <li>每当滑动到两个view之间的一半时，将会移除一个边界view（往左滑移除右边界）和获取一个新的
+ *     <li>每当滑动到两个view之间的一半(offset值为0.5)时，将会移除一个边界view（往左滑移除右边界）和获取一个新的
  *     显示view，并且调整view的index order以保持正确的层叠效果，参见{@link #onLayout(boolean, int, int, int, int)}</li>
  * </ol>
  * </p>
@@ -95,10 +95,15 @@ public class CoverFlowView extends RelativeLayout {
 
 
     // 基础alphaֵ
-    private final int ALPHA_DATUM = 76;
+    private static final int ALPHA_DATUM = 76;
+    // 临界view alpha
     private int STANDARD_ALPHA;
-    // 基础缩放值
-//    private static final float CARD_SCALE = 0.15f;
+
+    // 临界view的scale比例，因为是反向取值，所以这个值越大，临界view会越小
+    private float mEdgeScale;
+    private static final float MIN_SCALE = 0f;
+    private static final float MAX_SCALE = 0.8f;
+    private static final float DEFAULT_SCALE = 0.25f;
 
     private static float MOVE_POS_MULTIPLE = 3.0f;
     private static final int TOUCH_MINIMUM_MOVE = 5;
@@ -153,6 +158,13 @@ public class CoverFlowView extends RelativeLayout {
 //                R.styleable.CoverFlowView_reflectionGap, 0);
 
         mLoopMode = a.getBoolean(R.styleable.CoverFlowView_loopMode, true);
+
+        float scaleRatio = a.getFraction(R.styleable.CoverFlowView_scaleRatio, 1, 1, -1f);
+        if (scaleRatio == -1) {
+            mEdgeScale = DEFAULT_SCALE;
+        } else {
+            mEdgeScale = (MAX_SCALE - MIN_SCALE) * scaleRatio + MIN_SCALE;
+        }
 
         mGravity = CoverFlowGravity.values()[a.getInt(
                 R.styleable.CoverFlowView_coverflowGravity,
@@ -494,7 +506,7 @@ public class CoverFlowView extends RelativeLayout {
         child.layout(0, 0, child.getMeasuredWidth(), child.getMeasuredHeight());
 
         float scale;
-        scale = 1 - Math.abs(offset) * 0.25f;
+        scale = 1 - Math.abs(offset) * mEdgeScale;
 
 
         // 延x轴移动的距离应该根据center图片决定
@@ -971,6 +983,16 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     private boolean clickSwitchEnable = true;
+
+    public void setScaleRatio(float scaleRatio) {
+        if (scaleRatio > 1)
+            scaleRatio = 1;
+        if (scaleRatio < 0)
+            scaleRatio = 0;
+
+        mEdgeScale = (MAX_SCALE - MIN_SCALE) * scaleRatio + MIN_SCALE;
+        requestLayout();
+    }
 
     /**
      * 是否可以点击左右侧 来切换上下张
