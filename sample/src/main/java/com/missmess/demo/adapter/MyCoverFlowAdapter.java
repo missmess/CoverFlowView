@@ -4,9 +4,11 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.missmess.coverflowview.ACoverFlowAdapter;
 import com.missmess.demo.R;
@@ -16,10 +18,16 @@ import com.missmess.demo.R;
  * @since 2016/07/28 16:52
  */
 public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.ViewHolder> {
-    private int[] tipRess = {R.string.cover_tip0, R.string.cover_tip1, R.string.cover_tip2, R.string.cover_tip3, R.string.cover_tip4};
+    public static final int[] InitialTips = {R.string.cover_tip0, R.string.cover_tip1, R.string.cover_tip2, R.string.cover_tip3, R.string.cover_tip4};
+    public static final int[] NewTips = {R.string.new_cover_tip0, R.string.new_cover_tip1, R.string.new_cover_tip2, R.string.new_cover_tip3, R.string.new_cover_tip4, R.string.app_name};
+    private int[] tipRess = InitialTips;
 
     public void setTips(int[] tips) {
         this.tipRess = tips;
+    }
+
+    public int[] getTips() {
+        return tipRess;
     }
 
     @Override
@@ -54,8 +62,14 @@ public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.View
             }
         } else if(vh instanceof ViewHolder2) {
             ViewHolder2 holder = (ViewHolder2) vh;
-            Context context = holder.textView2.getContext();
+            final Context context = holder.textView2.getContext();
             holder.textView2.setText(context.getString(R.string.circle, position));
+            holder.imageView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Toast.makeText(context, "点击了item上的button", Toast.LENGTH_SHORT).show();
+                }
+            });
         }
     }
 
@@ -98,10 +112,12 @@ public class MyCoverFlowAdapter extends ACoverFlowAdapter<ACoverFlowAdapter.View
 
     class ViewHolder2 extends ACoverFlowAdapter.ViewHolder {
         TextView textView2;
+        ImageButton imageView;
 
         public ViewHolder2(View itemView) {
             super(itemView);
             textView2 = (TextView) itemView.findViewById(R.id.textView2);
+            imageView = (ImageButton) itemView.findViewById(R.id.imageView);
         }
     }
 }

@@ -3,23 +3,23 @@ package com.missmess.coverflowview;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.database.DataSetObserver;
-import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AnimationUtils;
 import android.widget.RelativeLayout;
 
 import com.nineoldandroids.animation.Animator;
+import com.nineoldandroids.animation.AnimatorListenerAdapter;
 import com.nineoldandroids.animation.ValueAnimator;
-import com.nineoldandroids.animation.ValueAnimator.AnimatorUpdateListener;
 import com.nineoldandroids.view.ViewHelper;
 
-import java.util.ArrayList;
+import java.util.Locale;
 
 /**
  * 将一组view以CoverFlow效果展示出来。
@@ -45,9 +45,6 @@ import java.util.ArrayList;
  *
  */
 public class CoverFlowView extends RelativeLayout {
-    private AdapterDataSetObserver mDataSetObserver;
-    private boolean mLoopMode;
-    private ValueAnimator mAnimator;
 
     public enum CoverFlowGravity {
         TOP, BOTTOM, CENTER_VERTICAL
@@ -57,42 +54,52 @@ public class CoverFlowView extends RelativeLayout {
         MATCH_PARENT, WRAP_CONTENT
     }
 
-    protected CoverFlowGravity mGravity;
+    /**
+     * The CoverFlowView is not currently scrolling.
+     *
+     * @see #getScrollState()
+     */
+    public static final int SCROLL_STATE_IDLE = 0;
 
+    /**
+     * The CoverFlowView is currently being dragged by outside input such as user touch input.
+     *
+     * @see #getScrollState()
+     */
+    public static final int SCROLL_STATE_DRAGGING = 1;
+
+    /**
+     * The CoverFlowView is currently animating to a final position while not under
+     * outside control.
+     *
+     * @see #getScrollState()
+     */
+    public static final int SCROLL_STATE_SETTLING = 2;
+
+    private int mScrollState = SCROLL_STATE_IDLE;
+
+    protected CoverFlowGravity mGravity;
     protected CoverFlowLayoutMode mLayoutMode;
 
-//    private Scroller mScroller;
     /**
-     * To store reflections need to remove
+     * 显示在CoverFlowView上的所有view的map，其中key为对应的adapter position
      */
-    private ArrayList<View> removeViewArray;
-
     private SparseArray<View> showViewArray;
+    // 一屏显示的数量
+    private int mVisibleChildCount;
+    // 左右两边显示的个数
+    protected int mSiblingCount = 1;
+    private float mOffset = 0f;
 
     private int paddingLeft;
     private int paddingRight;
     private int paddingTop;
     private int paddingBottom;
-
-    private int mWidth; // 控件的宽度
-
     private float reflectHeightFraction = 0;
     private int reflectGap = 0;
-
+    private int mWidth; // 控件的宽度
     private int mChildHeight; // child的高度
     private int mChildTranslateY;
-//	private int mReflectionTranslateY;
-
-    private int mVisibleChildCount; // 一屏显示的图片数量
-
-    // the visible views left and right 左右两边显示的个数
-    protected int VISIBLE_VIEWS = 1;
-
-    private ACoverFlowAdapter mAdapter;
-
-    private float mOffset;
-//    private int mLastOffset;
-
 
     // 基础alphaֵ
     private static final int ALPHA_DATUM = 76;
@@ -106,11 +113,42 @@ public class CoverFlowView extends RelativeLayout {
     private static final float DEFAULT_SCALE = 0.25f;
 
     private static float MOVE_POS_MULTIPLE = 3.0f;
-    private static final int TOUCH_MINIMUM_MOVE = 5;
     private static final float MOVE_SPEED_MULTIPLE = 1;
     private static final float MAX_SPEED = 6.0f;
     private static final float FRICTION = 10.0f;
+    private static int mTouchSlop;
 
+    private ACoverFlowAdapter mAdapter;
+    private AdapterDataSetObserver mDataSetObserver;
+    private OnTopViewClickListener mTopViewClickLister;
+    private OnViewOnTopListener mViewOnTopListener;
+    private OnTopViewLongClickListener mTopViewLongClickLister;
+
+    private boolean mDataChanged = false;
+    private Float mPostOffset;
+
+    private boolean mLoopMode;
+    int lastMidIndex = -1; //最近的中间view的offset值
+    int mViewOnTopPosition = -1; // view处于顶部选中状态的的position，-1代表无
+
+    private View touchViewItem = null;
+    private boolean isOnTopView = false;
+
+    private Runnable longClickRunnable = null;
+
+    private boolean mTouchCanceled = false;
+    private float mTouchStartPos;
+    private float mTouchStartX;
+    private float mTouchStartY;
+
+    private long mStartTime;
+    private float mStartOffset;
+    private float mStartSpeed;
+    private float mDuration;
+
+    private Runnable mSettleAnimationRunnable;
+    private boolean clickSwitchEnable = true;
+    private ValueAnimator mScrollAnimator;
     private VelocityTracker mVelocity;
 
     public CoverFlowView(Context context) {
@@ -139,23 +177,13 @@ public class CoverFlowView extends RelativeLayout {
             throw new IllegalArgumentException(
                     "visible views must be an odd number");
         }
-        if(totalVisibleChildren < 3) {
+        if (totalVisibleChildren < 3) {
             throw new IllegalArgumentException(
                     "visible views must be a number greater than 3");
         }
 
-        VISIBLE_VIEWS = totalVisibleChildren >> 1; // 计算出左右两两边的显示个数
+        mSiblingCount = totalVisibleChildren >> 1; // 计算出左右两两边的显示个数
         mVisibleChildCount = totalVisibleChildren;
-
-//        reflectHeightFraction = a.getFraction(
-//                R.styleable.CoverFlowView_reflectionHeight, 100, 0, 0.0f);
-//
-//        if (reflectHeightFraction > 100) {
-//            reflectHeightFraction = 100;
-//        }
-//        reflectHeightFraction /= 100;
-//        reflectGap = a.getDimensionPixelSize(
-//                R.styleable.CoverFlowView_reflectionGap, 0);
 
         mLoopMode = a.getBoolean(R.styleable.CoverFlowView_loopMode, true);
 
@@ -178,21 +206,18 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     private void init() {
-        setWillNotDraw(false);
+        setWillNotDraw(true);
         setClickable(true);
 
-//        if (mScroller == null) {
-//            mScroller = new Scroller(getContext(), new AccelerateDecelerateInterpolator());
-//        }
+        final ViewConfiguration vc = ViewConfiguration.get(getContext());
+        mTouchSlop = vc.getScaledTouchSlop();
+
         if (showViewArray == null) {
             showViewArray = new SparseArray<>();
         }
-        if (removeViewArray == null) {
-            removeViewArray = new ArrayList<>();
-        }
 
         // 计算透明度
-        STANDARD_ALPHA = (255 - ALPHA_DATUM) / VISIBLE_VIEWS;
+        STANDARD_ALPHA = (255 - ALPHA_DATUM) / mSiblingCount;
 
         if (mGravity == null) {
             mGravity = CoverFlowGravity.CENTER_VERTICAL;
@@ -201,77 +226,101 @@ public class CoverFlowView extends RelativeLayout {
             mLayoutMode = CoverFlowLayoutMode.WRAP_CONTENT;
         }
 
-        initChildren(VISIBLE_VIEWS);
+        resetPosition();
+    }
+
+    private void resetPosition() {
+        mOffset = 0f;
+        lastMidIndex = 0;
+        mStartOffset = 0;
+        mViewOnTopPosition = -1;
     }
 
     /**
-     * 初始化添加所有的children。
-     * @param midIndex 指定最中间的view的index。
+     * 创建children view，添加到空间中，并缓存在集合中。
+     * @param inLayout 是否在onLayout中调用
+     * @param midAdapterPosition 中间的view对应的adapter position
      */
-    private void initChildren(int midIndex) {
-        // 必须先停止正在进行的滑动动画
-        endAnimation();
-        // 停止setSelection的动画
-        if (mAnimator != null)
-            mAnimator.cancel();
-        // 停止接收触摸事件
-        onTouchMove = false;
-        // 停止long click动作
-        removeLongClickAction();
-        // 移除所有view
-        removeAllViews();
+    private void applyLayoutChildren(boolean inLayout, int midAdapterPosition) {
+//        Log.v("CoverFlowView", "applyLayoutChildren:mid position=" + midAdapterPosition);
+        if (inLayout) {
+            removeAllViewsInLayout();
+        } else {
+            removeAllViews();
+        }
+        ACoverFlowAdapter adapter = mAdapter;
 
-        showViewArray.clear();
-        removeViewArray.clear();
-
-        mChildHeight = 0;
-        int mid = midIndex - VISIBLE_VIEWS;
-        mOffset = mid;
-//        mLastOffset = -1;
-
-        isFirstin = true;
-        lastMid = 0;
-        lastViewOnTopIndex = -1;
-
-        for (int i = 0, j = (midIndex - VISIBLE_VIEWS); i < mVisibleChildCount && mAdapter != null && i < mAdapter.getCount(); ++i, ++j) {
-            View convertView = null;
-            if (removeViewArray.size() > 0) {
-                convertView = removeViewArray.remove(0);
-            }
-            int count = mAdapter.getCount();
-            int index = 0;
-            View view = null;
-            if(j < 0) {
-                if(mLoopMode) {
-                    index = count + j;
-                    view = mAdapter.getView(index, convertView, this);
-                }
-            } else if(j >= count) {
-                if(mLoopMode) {
-                    index = j - count;
-                    view = mAdapter.getView(index, convertView, this);
-                }
-            } else {
-                index = j;
-                view = mAdapter.getView(index, convertView, this);
+        if (adapter != null) {
+            int count = adapter.getCount();
+            if (count == 0) {
+                return;
             }
 
-            if(view != null) {
-                showViewArray.put(index, view);
+            if (count < mVisibleChildCount) {
+                throw new IllegalArgumentException("adapter's count must be greater than visible views number");
+            }
 
-                //按Z轴顺序添加view，保持层叠效果
-                if (i <= VISIBLE_VIEWS) {
-                    addView(view);
+            SparseArray<View> temp = new SparseArray<>();
+            for (int i = 0, j = (midAdapterPosition - mSiblingCount); i < mVisibleChildCount && i < count; ++i, ++j) {
+                View convertView;
+                int index = -1;
+                View view;
+                if (j < 0) {
+                    if (mLoopMode) {
+                        index = count + j;
+
+                    }
+                } else if (j >= count) {
+                    if (mLoopMode) {
+                        index = j - count;
+                    }
                 } else {
-                    addView(view, 0);
+                    index = j;
                 }
+
+                if (index != -1) { //需要获取view
+                    convertView = showViewArray.get(index);
+                    view = mAdapter.getView(index, convertView, this);
+                    temp.put(index, view);
+
+                    //按Z轴顺序添加view，保持层叠效果
+                    int pos;
+                    if (i <= mSiblingCount) {
+                        pos = -1;
+                    } else {
+                        pos = 0;
+                    }
+                    if (inLayout) {
+                        LayoutParams params = (LayoutParams) view.getLayoutParams();
+                        if (params == null) {
+                            params = (LayoutParams) generateDefaultLayoutParams();
+                        }
+                        addViewInLayout(view, pos, params);
+                    } else {
+                        addView(view, pos);
+                    }
+                }
+            }
+
+            showViewArray.clear();
+            showViewArray = temp;
+
+            if (inLayout) {
+                // 如果在layout进程中，不调用此句不会刷新界面？
+                // 不太清楚原因
+                post(new Runnable() {
+                    @Override
+                    public void run() {
+                        requestLayout();
+                    }
+                });
             }
         }
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-//        Log.d("CoverFlowView", "onMeasure");
+//        Log.v("CoverFlowView", "onMeasure");
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (mAdapter == null || showViewArray.size() <= 0) {
@@ -293,11 +342,11 @@ public class CoverFlowView extends RelativeLayout {
         int maxChildTotalHeight = 0;
         for (int i = 0; i < getChildCount() && i < mVisibleChildCount && i < showViewArray.size(); ++i) {
 
-//			View view = showViewArray.get(i+firstIndex);
+            //			View view = showViewArray.get(i+firstIndex);
             View view = getChildAt(i);
             measureChild(view, widthMeasureSpec, heightMeasureSpec);
 
-//			final int childHeight = ScreenUtil.dp2px(getContext(), 110);
+            //			final int childHeight = ScreenUtil.dp2px(getContext(), 110);
             final int childHeight = view.getMeasuredHeight();
             final int childTotalHeight = (int) (childHeight + childHeight
                     * reflectHeightFraction + reflectGap);
@@ -361,118 +410,105 @@ public class CoverFlowView extends RelativeLayout {
             mChildTranslateY = heightSize - paddingBottom - mChildHeight;
         }
 
-//		mReflectionTranslateY = (int) (mChildTranslateY + mChildHeight - mChildHeight
-//				* reflectHeightFraction);
+        //		mReflectionTranslateY = (int) (mChildTranslateY + mChildHeight - mChildHeight
+        //				* reflectHeightFraction);
 
         setMeasuredDimension(widthSize, heightSize);
         mWidth = widthSize;
     }
 
-    boolean isFirstin = true; //第一次初始化该控件
-    int lastMid = 0; //最近的中间view的offset值
-    int lastViewOnTopIndex = -1; //最近处理过的viewOnTop监听的index
-
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-//        Log.d("CoverFlowView", "onLayout");
-        if (mAdapter == null || mAdapter.getCount() <= 0 || showViewArray.size() <= 0) {
-            return;
+//        Log.v("CoverFlowView", "onLayout");
+        ACoverFlowAdapter adapter = mAdapter;
+        float offset;
+        if (mDataChanged && mPostOffset != null) {
+            offset = mPostOffset;
+            mPostOffset = null;
+        } else {
+            offset = mOffset;
         }
-
-        final float offset = mOffset;
         int mid = (int) Math.floor(offset + 0.5);
-
         //右边孩子的数量
-        int rightChild = (mVisibleChildCount % 2 == 0) ? (mVisibleChildCount >> 1) - 1
-                : mVisibleChildCount >> 1;
+        int rightCount = mSiblingCount;
         //左边孩子的数量
-        int leftChild = mVisibleChildCount >> 1;
+        int leftCount = mSiblingCount;
 
-        if (!isFirstin) {
-            if (lastMid + 1 == mid) { //右滑至item出现了
-                int actuallyPositionStart = getActuallyPosition(lastMid - leftChild);
+        if (mDataChanged) {
+            applyLayoutChildren(true, getActuallyPosition(mid));
+            mDataChanged = false;
+        } else {
+            if (lastMidIndex + 1 == mid) { //右滑至item出现了
+                int actuallyPositionStart = getActuallyPosition(lastMidIndex - leftCount);
                 View view = showViewArray.get(actuallyPositionStart);
                 showViewArray.remove(actuallyPositionStart);
-                removeViewArray.add(view);
-                removeView(view);
-
-                View convertView = null;
-                if (removeViewArray.size() > 0) {
-                    convertView = removeViewArray.remove(0);
-                }
+                removeViewInLayout(view);
 
                 // 非loop模式下，index<=count-vis-1。所以mid<=count-vis-1-vis
-                boolean avail = mid <= (mAdapter.getCount() - VISIBLE_VIEWS - 1) - VISIBLE_VIEWS;
-                if(mLoopMode || avail) {
-                    int actuallyPositionEnd = getActuallyPosition(mid + rightChild);
-                    View viewItem = mAdapter.getView(actuallyPositionEnd, convertView, this);
+                boolean avail = mid <= (adapter.getCount() - mSiblingCount - 1) - mSiblingCount;
+                if (mLoopMode || avail) {
+                    int actuallyPositionEnd = getActuallyPosition(mid + rightCount);
+                    View viewItem = adapter.getView(actuallyPositionEnd, view, this);
                     showViewArray.put(actuallyPositionEnd, viewItem);
-                    addView(viewItem, 0);
+                    LayoutParams params = (LayoutParams) viewItem.getLayoutParams();
+                    if (params == null) {
+                        params = (LayoutParams) generateDefaultLayoutParams();
+                    }
+                    addViewInLayout(viewItem, 0, params);
                 }
 
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
                 midView.bringToFront();
-            } else if (lastMid - 1 == mid) { //左滑至item出现了
-                int actuallyPositionEnd = getActuallyPosition(lastMid + rightChild);
+            } else if (lastMidIndex - 1 == mid) { //左滑至item出现了
+                int actuallyPositionEnd = getActuallyPosition(lastMidIndex + rightCount);
                 View view = showViewArray.get(actuallyPositionEnd);
                 showViewArray.remove(actuallyPositionEnd);
-                removeViewArray.add(view);
-                removeView(view);
-
-                View convertView = null;
-                if (removeViewArray.size() > 0) {
-                    convertView = removeViewArray.remove(0);
-                }
+                removeViewInLayout(view);
 
                 // 非loop模式下，index>=-vis。所以mid>=-vis+vis
                 boolean avail = mid >= 0;
-                if(mLoopMode || avail) {
-                    int actuallyPositionstart = getActuallyPosition(mid - leftChild);
-                    View viewItem = mAdapter.getView(actuallyPositionstart, convertView, this);
-                    showViewArray.put(actuallyPositionstart, viewItem);
-                    addView(viewItem, 0);
+                if (mLoopMode || avail) {
+                    int actuallyPositionStart = getActuallyPosition(mid - leftCount);
+                    View viewItem = adapter.getView(actuallyPositionStart, view, this);
+                    showViewArray.put(actuallyPositionStart, viewItem);
+                    LayoutParams params = (LayoutParams) viewItem.getLayoutParams();
+                    if (params == null) {
+                        params = (LayoutParams) generateDefaultLayoutParams();
+                    }
+                    addViewInLayout(viewItem, 0, params);
                 }
 
                 int actuallyPositionMid = getActuallyPosition(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
                 midView.bringToFront();
             }
-        } else { //第一次进入
-            isFirstin = false;
         }
 
-        lastMid = mid;
+        lastMidIndex = mid;
 
         int i;
         // draw the left children
         // 计算左边孩子的位置
-        int startPos = mid - leftChild;
+        int startPos = mid - leftCount;
         for (i = startPos; i < mid; ++i) {
             layoutLeftChild(i, i - offset);
         }
 
         // 计算 右边 和 中间
-        int endPos = mid + rightChild;
+        int endPos = mid + rightCount;
         for (i = endPos; i >= mid; i--) {
             layoutRightChild(i, i - offset);
         }
-    }
-
-    @Override
-    protected void onDraw(Canvas canvas) {
-//        Log.d("CoverFlowView", "onDraw");
-        final float offset = mOffset;
-
+         // on top
         if ((offset - (int) offset) == 0.0f) {
             int top = getActuallyPosition((int) offset);
-            if(top != lastViewOnTopIndex) {
-                lastViewOnTopIndex = top;
+            if (top != mViewOnTopPosition) {
+                mViewOnTopPosition = top;
                 if (mViewOnTopListener != null)
                     mViewOnTopListener.viewOnTop(top, getTopView());
             }
         }
-        super.onDraw(canvas);
     }
 
     private View layoutLeftChild(int position, float offset) {
@@ -496,13 +532,7 @@ public class CoverFlowView extends RelativeLayout {
         return child;
     }
 
-    /**
-     * <ul>
-     * <li>对bitmap进行伪3d变换</li>
-     * </ul>
-     */
     private void makeChildTransformer(View child, int position, float offset) {
-//    	child.layout(0, 0, ScreenUtil.dp2px(getContext(), 200),ScreenUtil.dp2px(getContext(), 110));
         child.layout(0, 0, child.getMeasuredWidth(), child.getMeasuredHeight());
 
         float scale;
@@ -515,9 +545,6 @@ public class CoverFlowView extends RelativeLayout {
         final int originalChildHeight = (int) (mChildHeight - mChildHeight
                 * reflectHeightFraction - reflectGap);
 
-//        final int childTotalHeight = (int) (child.getHeight()
-//                + child.getHeight() * reflectHeightFraction + reflectGap);
-
         final float originalChildHeightScale = (float) originalChildHeight
                 / child.getHeight();
 
@@ -527,77 +554,75 @@ public class CoverFlowView extends RelativeLayout {
 
         final int centerChildWidth = (int) (child.getWidth() * originalChildHeightScale);
 
-//        final int centerChildWidth = (int) (child.getWidth() * childHeightScale);
-
         int leftSpace = ((mWidth >> 1) - paddingLeft) - (centerChildWidth >> 1);
         int rightSpace = (((mWidth >> 1) - paddingRight) - (centerChildWidth >> 1));
 
         //计算出水平方向的x坐标
         if (offset <= 0)
-            translateX = ((float) leftSpace / VISIBLE_VIEWS)
-                    * (VISIBLE_VIEWS + offset) + paddingLeft;
+            translateX = ((float) leftSpace / mSiblingCount)
+                    * (mSiblingCount + offset) + paddingLeft;
         else
-            translateX = mWidth - ((float) rightSpace / VISIBLE_VIEWS)
-                    * (VISIBLE_VIEWS - offset) - childWidth
+            translateX = mWidth - ((float) rightSpace / mSiblingCount)
+                    * (mSiblingCount - offset) - childWidth
                     - paddingRight;
 
         //根据offset 算出透明度
         float alpha = 254 - Math.abs(offset) * STANDARD_ALPHA;
         ViewHelper.setAlpha(child, 0);
-//        child.setAlpha(0);
+        //        child.setAlpha(0);
         if (alpha < 0) {
             alpha = 0;
         } else if (alpha > 254) {
             alpha = 254;
         }
         ViewHelper.setAlpha(child, alpha / 254.0f);
-//        child.setAlpha(alpha/254.0f);
+        //        child.setAlpha(alpha/254.0f);
 
         float adjustedChildTranslateY = 0;
 
-//        //兼容api 10
-//        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.HONEYCOMB) {
-//            android.animation.ObjectAnimator anim1 = android.animation.ObjectAnimator.ofFloat(child, "scaleX",
-//                    1.0f, childHeightScale);
-//            android.animation.ObjectAnimator anim2 = android.animation.ObjectAnimator.ofFloat(child, "scaleY",
-//                    1.0f, childHeightScale);
-//            android.animation.AnimatorSet animSet = new android.animation.AnimatorSet();
-//            animSet.setDuration(0);
-//            //两个动画同时执行
-//            animSet.playTogether(anim1, anim2);
-//
-//            //显示的调用invalidate
-////            child.invalidate();
-//            animSet.setTarget(child);
-//            animSet.start();
-//        } else {
-//            ObjectAnimator anim1 = ObjectAnimator.ofFloat(child, "scaleX",
-//                    1.0f, childHeightScale);
-//            ObjectAnimator anim2 = ObjectAnimator.ofFloat(child, "scaleY",
-//                    1.0f, childHeightScale);
-//            AnimatorSet animSet = new AnimatorSet();
-//            animSet.setDuration(0);
-//            //两个动画同时执行
-//            animSet.playTogether(anim1, anim2);
-//
-//            //显示的调用invalidate
-////            child.invalidate();
-//            animSet.setTarget(child);
-//            animSet.start();
-//        }
+        //        //兼容api 10
+        //        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.HONEYCOMB) {
+        //            android.animation.ObjectAnimator anim1 = android.animation.ObjectAnimator.ofFloat(child, "scaleX",
+        //                    1.0f, childHeightScale);
+        //            android.animation.ObjectAnimator anim2 = android.animation.ObjectAnimator.ofFloat(child, "scaleY",
+        //                    1.0f, childHeightScale);
+        //            android.animation.AnimatorSet animSet = new android.animation.AnimatorSet();
+        //            animSet.setDuration(0);
+        //            //两个动画同时执行
+        //            animSet.playTogether(anim1, anim2);
+        //
+        //            //显示的调用invalidate
+        ////            child.invalidate();
+        //            animSet.setTarget(child);
+        //            animSet.start();
+        //        } else {
+        //            ObjectAnimator anim1 = ObjectAnimator.ofFloat(child, "scaleX",
+        //                    1.0f, childHeightScale);
+        //            ObjectAnimator anim2 = ObjectAnimator.ofFloat(child, "scaleY",
+        //                    1.0f, childHeightScale);
+        //            AnimatorSet animSet = new AnimatorSet();
+        //            animSet.setDuration(0);
+        //            //两个动画同时执行
+        //            animSet.playTogether(anim1, anim2);
+        //
+        //            //显示的调用invalidate
+        ////            child.invalidate();
+        //            animSet.setTarget(child);
+        //            animSet.start();
+        //        }
         float sc = childHeightScale;
         ViewHelper.setScaleX(child, sc);
         ViewHelper.setScaleY(child, sc);
 
         ViewHelper.setPivotX(child, 0);
         ViewHelper.setPivotY(child, child.getHeight() / 2);
-//        child.setPivotX(0);
-//        child.setPivotY(child.getHeight()/2);
+        //        child.setPivotX(0);
+        //        child.setPivotY(child.getHeight()/2);
 
         ViewHelper.setTranslationX(child, translateX);
         ViewHelper.setTranslationY(child, mChildTranslateY + adjustedChildTranslateY);
-//        child.setTranslationX(translateX);
-//        child.setTranslationY(mChildTranslateY+ adjustedChildTranslateY);
+        //        child.setTranslationX(translateX);
+        //        child.setTranslationY(mChildTranslateY+ adjustedChildTranslateY);
     }
 
     /**
@@ -606,7 +631,7 @@ public class CoverFlowView extends RelativeLayout {
      * @return int
      */
     public int getTopViewPosition() {
-        return getActuallyPosition(lastMid);
+        return getActuallyPosition(lastMidIndex);
     }
 
     /**
@@ -625,11 +650,11 @@ public class CoverFlowView extends RelativeLayout {
      * @return adapter position
      */
     private int getActuallyPosition(int index) {
-        if(mAdapter == null)
+        if (mAdapter == null)
             return index;
         int count = mAdapter.getCount();
 
-        int position = index + VISIBLE_VIEWS;
+        int position = index + mSiblingCount;
         while (position < 0 || position >= count) {
             if (position < 0) {
                 position += count;
@@ -642,21 +667,25 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     public void setAdapter(ACoverFlowAdapter adapter) {
-        if (mAdapter != null) {
-            mAdapter.unregisterDataSetObserver(mDataSetObserver);
+        ACoverFlowAdapter old = mAdapter;
+        if (old != null) {
+            old.unregisterDataSetObserver(mDataSetObserver);
         }
 
-        if(adapter.getCount() < mVisibleChildCount) {
-            throw new IllegalArgumentException("adapter's count must be greater than visible views number");
-        }
+        stopScroll();
+        cancelTouch();
+        resetPosition();
+
         mAdapter = adapter;
-        initChildren(VISIBLE_VIEWS);
-
         if (mDataSetObserver == null) {
             mDataSetObserver = new AdapterDataSetObserver();
         }
-        mAdapter.registerDataSetObserver(mDataSetObserver);
+        if (adapter != null) {
+            adapter.registerDataSetObserver(mDataSetObserver);
+        }
 
+        onAdapterChanged(old, adapter);
+        mDataChanged = true;
         requestLayout();
     }
 
@@ -664,59 +693,74 @@ public class CoverFlowView extends RelativeLayout {
         return mAdapter;
     }
 
-    private boolean onTouchMove = false; //是否正在执行触摸移动逻辑
-
-    private View touchViewItem = null;
-    private boolean isOnTopView = false;
-    private float downY;
-    private float downX;
+    private void onAdapterChanged(ACoverFlowAdapter oldAdapter, ACoverFlowAdapter newAdapter) {
+        // 如果adapter 改变了，view缓存就过期了。清空
+        showViewArray.clear();
+    }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    public boolean onInterceptTouchEvent(MotionEvent event) {
         if (getParent() != null) {
             getParent().requestDisallowInterceptTouchEvent(true);
         }
 
-        if (isOnAnimator) {
-            return false;
-        }
+        boolean handled = false;
         int action = event.getAction();
-
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                onTouchMove = true;
-//                if (mScroller.computeScrollOffset()) {
-//                    mScroller.abortAnimation();
-//                    invalidate();
-//                    requestLayout();
-//                }
-                touchBegan(event);
+                if (mScrollState == SCROLL_STATE_SETTLING) {
+                    setScrollState(SCROLL_STATE_DRAGGING);
+                }
+                mTouchCanceled = false;
+
                 touchViewItem = getTopView();
                 isOnTopView = inRangeOfView(touchViewItem, event);
-                downX = event.getX();
-                downY = event.getY();
+                // 如果触摸位置不在顶部view内，直接消费这个event。
+                handled = !isOnTopView;
+                break;
+        }
+        return handled;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        int action = event.getAction();
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                touchBegan(event);
+
                 if (isOnTopView) {
                     sendLongClickAction();
                 }
-                return true;
-            case MotionEvent.ACTION_CANCEL:
+                break;
             case MotionEvent.ACTION_MOVE:
-                if (!onTouchMove) //不再进行触摸移动处理
-                    return false;
+                if (mTouchCanceled) {
+                    break;
+                }
 
                 touchMoved(event);
 
-                if (Math.abs(downX - event.getX()) >= 10
-                        || Math.abs(downY - event.getY()) >= 10) { //10像素以外，不属于点击事件
+                boolean startScroll = false;
+                if (Math.abs(mTouchStartX - event.getX()) > mTouchSlop
+                        || Math.abs(mTouchStartY - event.getY()) > mTouchSlop) {
                     removeLongClickAction();
                     touchViewItem = null;
                     isOnTopView = false;
+                    startScroll = true;
                 }
 
-                return true;
+                if (mScrollState != SCROLL_STATE_DRAGGING) {
+                    if (startScroll) {
+                        setScrollState(SCROLL_STATE_DRAGGING);
+                    }
+                }
+
+                break;
+            case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_UP:
-                if (!onTouchMove) //不再进行触摸终止逻辑
-                    return false;
+                if (mTouchCanceled) {
+                    break;
+                }
 
                 removeLongClickAction();
                 if (isOnTopView && touchViewItem == getTopView()
@@ -730,10 +774,10 @@ public class CoverFlowView extends RelativeLayout {
                 isOnTopView = false;
                 touchEnded(event);
 
-                //不是点击top view。并且启用点击切换。并且点击了
+                //不是点击top view。并且启用点击切换。并且点击了左右侧view
                 if (!isOnTopView && clickSwitchEnable
-                        && Math.abs(downX - event.getX()) < 10
-                        && Math.abs(downY - event.getY()) < 10
+                        && Math.abs(mTouchStartX - event.getX()) < mTouchSlop
+                        && Math.abs(mTouchStartY - event.getY()) < mTouchSlop
                         && event.getEventTime() - event.getDownTime() < 500) {
                     if (atLeftOfView(getTopView(), event)) {
                         gotoPrevious();
@@ -741,17 +785,20 @@ public class CoverFlowView extends RelativeLayout {
                         gotoForward();
                     }
                 }
-                return true;
+
+                break;
         }
 
-        return false;
+        return !mTouchCanceled;
     }
 
-    private Runnable longClickRunnable = null;
+    private void cancelTouch() {
+        mTouchCanceled = true;
+        setScrollState(SCROLL_STATE_IDLE);
+         // 移除long click
+        removeLongClickAction();
+    }
 
-    /**
-     * 发送长点击事件Runnable
-     */
     private void sendLongClickAction() {
         removeLongClickAction();
         longClickRunnable = new Runnable() {
@@ -767,14 +814,150 @@ public class CoverFlowView extends RelativeLayout {
         postDelayed(longClickRunnable, 600L);
     }
 
-    /**
-     * 移除长点击事件Runnable
-     */
     private void removeLongClickAction() {
         if (longClickRunnable != null) {
             removeCallbacks(longClickRunnable);
             longClickRunnable = null;
         }
+    }
+
+    private void touchBegan(MotionEvent event) {
+        endSettleAnimation();
+
+        float x = event.getX();
+        mTouchStartX = x;
+        mTouchStartY = event.getY();
+        mStartTime = AnimationUtils.currentAnimationTimeMillis();
+        mStartOffset = mOffset;
+
+        mTouchStartPos = (x / mWidth) * MOVE_POS_MULTIPLE - 5;
+        mTouchStartPos /= 2;
+
+        mVelocity = VelocityTracker.obtain();
+        mVelocity.addMovement(event);
+    }
+
+    private void touchMoved(MotionEvent event) {
+        float pos = (event.getX() / mWidth) * MOVE_POS_MULTIPLE - 5;
+        pos /= 2;
+
+        attemptSetOffset(mStartOffset + mTouchStartPos - pos);
+
+        invalidate();
+        requestLayout();
+        mVelocity.addMovement(event);
+    }
+
+    private void touchEnded(MotionEvent event) {
+        float pos = (event.getX() / mWidth) * MOVE_POS_MULTIPLE - 5;
+        pos /= 2;
+
+        if ((mOffset - Math.floor(mOffset)) != 0) {
+            mStartOffset += mTouchStartPos - pos;
+            attemptSetOffset(mStartOffset);
+
+            mVelocity.addMovement(event);
+
+            mVelocity.computeCurrentVelocity(1000);
+            float speed = mVelocity.getXVelocity();
+
+            speed = (speed / mWidth) * MOVE_SPEED_MULTIPLE;
+            if (speed > MAX_SPEED)
+                speed = MAX_SPEED;
+            else if (speed < -MAX_SPEED)
+                speed = -MAX_SPEED;
+
+            startSettleAnimation(-speed);
+        } else {
+            setScrollState(SCROLL_STATE_IDLE);
+        }
+
+        mVelocity.clear();
+        mVelocity.recycle();
+    }
+
+    private void startSettleAnimation(float speed) {
+        if (mSettleAnimationRunnable != null) {
+            return;
+        }
+
+        float delta = speed * speed / (FRICTION * 2);
+        if (speed < 0)
+            delta = -delta;
+
+        float nearest = mStartOffset + delta;
+        nearest = (float) Math.floor(nearest + 0.5f);
+
+        mStartSpeed = (float) Math.sqrt(Math.abs(nearest - mStartOffset)
+                * FRICTION * 2);
+        if (nearest < mStartOffset)
+            mStartSpeed = -mStartSpeed;
+
+        mDuration = Math.abs(mStartSpeed / FRICTION);
+        mStartTime = AnimationUtils.currentAnimationTimeMillis();
+
+        mSettleAnimationRunnable = new Runnable() {
+            @Override
+            public void run() {
+                driveAnimation();
+            }
+        };
+        post(mSettleAnimationRunnable);
+        setScrollState(SCROLL_STATE_SETTLING);
+    }
+
+    private void driveAnimation() {
+        float elapsed = (AnimationUtils.currentAnimationTimeMillis() - mStartTime) / 1000.0f;
+        if (elapsed >= mDuration) {
+            endSettleAnimation();
+        } else {
+            updateAnimationAtElapsed(elapsed);
+            post(mSettleAnimationRunnable);
+        }
+    }
+
+    private void endSettleAnimation() {
+        if (mScrollState == SCROLL_STATE_SETTLING) {
+            attemptSetOffset((float) Math.floor(mOffset + 0.5));
+
+            invalidate();
+            requestLayout();
+
+            setScrollState(SCROLL_STATE_IDLE);
+        }
+
+        if (mSettleAnimationRunnable != null) {
+            removeCallbacks(mSettleAnimationRunnable);
+            mSettleAnimationRunnable = null;
+        }
+    }
+
+    private void updateAnimationAtElapsed(float elapsed) {
+        if (elapsed > mDuration)
+            elapsed = mDuration;
+
+        float delta = Math.abs(mStartSpeed) * elapsed - FRICTION * elapsed
+                * elapsed / 2;
+        if (mStartSpeed < 0)
+            delta = -delta;
+
+        attemptSetOffset(mStartOffset + delta);
+        invalidate();
+        requestLayout();
+    }
+
+    private void attemptSetOffset(float offset) {
+        float old = mOffset;
+        if (!mLoopMode) {
+            int start = -mSiblingCount;
+            int end = mAdapter.getCount() - mSiblingCount - 1;
+            if (offset < start) {
+                offset = start;
+            } else if (offset > end) {
+                offset = end;
+            }
+        }
+        mOffset = offset;
     }
 
     private boolean inRangeOfView(View view, MotionEvent ev) {
@@ -796,193 +979,11 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     private static void getViewRect(View v, Rect rect) {
-//        rect.left = (int) (v.getLeft() + v.getTranslationX());
-//        rect.top = (int) (v.getTop() + v.getTranslationY());
-//        rect.right = rect.left + v.getWidth();
-//        rect.bottom = rect.top + v.getHeight();
         rect.left = (int) com.nineoldandroids.view.ViewHelper.getX(v);
         rect.top = (int) com.nineoldandroids.view.ViewHelper.getY(v);
         rect.right = rect.left + v.getWidth();
         rect.bottom = rect.top + v.getHeight();
     }
-
-    private boolean mTouchMoved;
-    private float mTouchStartPos;
-    private float mTouchStartX;
-    private float mTouchStartY;
-
-    private long mStartTime;
-    private float mStartOffset;
-
-    private void touchBegan(MotionEvent event) {
-        endAnimation();
-
-        float x = event.getX();
-        mTouchStartX = x;
-        mTouchStartY = event.getY();
-        mStartTime = AnimationUtils.currentAnimationTimeMillis();
-        mStartOffset = mOffset;
-
-        mTouchMoved = false;
-
-        mTouchStartPos = (x / mWidth) * MOVE_POS_MULTIPLE - 5;
-        mTouchStartPos /= 2;
-
-        mVelocity = VelocityTracker.obtain();
-        mVelocity.addMovement(event);
-    }
-
-    private Runnable mAnimationRunnable;
-
-    private void endAnimation() {
-        if (mAnimationRunnable != null) {
-            attemptSetOffset((float) Math.floor(mOffset + 0.5));
-
-            invalidate();
-            requestLayout();
-
-            removeCallbacks(mAnimationRunnable);
-            mAnimationRunnable = null;
-        }
-    }
-
-    private void touchMoved(MotionEvent event) {
-        float pos = (event.getX() / mWidth) * MOVE_POS_MULTIPLE - 5;
-        pos /= 2;
-
-        if (!mTouchMoved) {
-            float dx = Math.abs(event.getX() - mTouchStartX);
-            float dy = Math.abs(event.getY() - mTouchStartY);
-            if (dx < TOUCH_MINIMUM_MOVE && dy < TOUCH_MINIMUM_MOVE)
-                return;
-            mTouchMoved = true;
-        }
-
-        attemptSetOffset(mStartOffset + mTouchStartPos - pos);
-
-        invalidate();
-        requestLayout();
-        mVelocity.addMovement(event);
-    }
-
-    private void touchEnded(MotionEvent event) {
-        float pos = (event.getX() / mWidth) * MOVE_POS_MULTIPLE - 5;
-        pos /= 2;
-
-        if (mTouchMoved || (mOffset - Math.floor(mOffset)) != 0) {
-            mStartOffset += mTouchStartPos - pos;
-            attemptSetOffset(mStartOffset);
-
-            mVelocity.addMovement(event);
-
-            mVelocity.computeCurrentVelocity(1000);
-            float speed = mVelocity.getXVelocity();
-
-            speed = (speed / mWidth) * MOVE_SPEED_MULTIPLE;
-            if (speed > MAX_SPEED)
-                speed = MAX_SPEED;
-            else if (speed < -MAX_SPEED)
-                speed = -MAX_SPEED;
-
-            startAnimation(-speed);
-        } else {
-//            Log.e(VIEW_LOG_TAG,
-//                    " touch ==>" + showViewArray.keyAt(showViewArray.indexOfValue(getTopView())) + "," + event.getX() + " , " + event.getY());
-            onTouchMove = false;
-        }
-
-        mVelocity.clear();
-        mVelocity.recycle();
-    }
-
-    private float mStartSpeed;
-    private float mDuration;
-
-    private void startAnimation(float speed) {
-        if (mAnimationRunnable != null) {
-            onTouchMove = false;
-            return;
-        }
-
-        float delta = speed * speed / (FRICTION * 2);
-        if (speed < 0)
-            delta = -delta;
-
-        float nearest = mStartOffset + delta;
-        nearest = (float) Math.floor(nearest + 0.5f);
-
-        mStartSpeed = (float) Math.sqrt(Math.abs(nearest - mStartOffset)
-                * FRICTION * 2);
-        if (nearest < mStartOffset)
-            mStartSpeed = -mStartSpeed;
-
-        mDuration = Math.abs(mStartSpeed / FRICTION);
-        mStartTime = AnimationUtils.currentAnimationTimeMillis();
-
-        mAnimationRunnable = new Runnable() {
-            @Override
-            public void run() {
-                driveAnimation();
-            }
-        };
-        post(mAnimationRunnable);
-    }
-
-    private void driveAnimation() {
-        float elapsed = (AnimationUtils.currentAnimationTimeMillis() - mStartTime) / 1000.0f;
-        if (elapsed >= mDuration) {
-            endAnimation();
-            onTouchMove = false;
-        } else {
-            updateAnimationAtElapsed(elapsed);
-            post(mAnimationRunnable);
-        }
-    }
-
-    private void updateAnimationAtElapsed(float elapsed) {
-        if (elapsed > mDuration)
-            elapsed = mDuration;
-
-        float delta = Math.abs(mStartSpeed) * elapsed - FRICTION * elapsed
-                * elapsed / 2;
-        if (mStartSpeed < 0)
-            delta = -delta;
-
-        attemptSetOffset(mStartOffset + delta);
-        invalidate();
-        requestLayout();
-    }
-
-//    @Override
-//    public void computeScroll() {
-//        super.computeScroll();
-//
-////        算出移动到某一个虚拟点时  mOffset的值  然后invalidate 重绘
-//        if (mScroller.computeScrollOffset()) {
-//            final int currX = mScroller.getCurrX();
-//
-//            Log.i("CoverFlowView", "computeScroll");
-//            attemptSetOffset((float) currX / 100);
-//
-//            invalidate();
-//        }
-//    }
-
-    private void attemptSetOffset(float offset) {
-        float old = mOffset;
-        if(!mLoopMode) {
-            int start = -VISIBLE_VIEWS;
-            int end = mAdapter.getCount() - VISIBLE_VIEWS - 1;
-            if (offset < start) {
-                offset = start;
-            } else if (offset > end) {
-                offset = end;
-            }
-        }
-        mOffset = offset;
-    }
-
-    private boolean clickSwitchEnable = true;
 
     public void setScaleRatio(float scaleRatio) {
         if (scaleRatio > 1)
@@ -1002,44 +1003,56 @@ public class CoverFlowView extends RelativeLayout {
     }
 
     public void setLoopMode(boolean loop) {
-        if (isOnAnimator || onTouchMove) { //如果正在执行点击切换动画 或者 正在执行触摸移动
+        if (loop == mLoopMode) {
             return;
         }
 
-        this.mLoopMode = loop;
-        int mid = (int) Math.floor(mOffset + 0.5);
-        initChildren(getActuallyPosition(mid));
-    }
+        stopScroll();
+        cancelTouch();
+        resetPosition();
 
-    private boolean isOnAnimator = false; //是否正在进行点击切换动画
+        this.mLoopMode = loop;
+
+        mDataChanged = true;
+        requestLayout();
+    }
 
     /**
      * 翻到前页
      */
     public void gotoPrevious() {
-        doAnimator(-1.0f);
+        doSmoothScrollAnimator(-1.0f);
     }
 
     /**
      * 前进到后一页
      */
     public void gotoForward() {
-        doAnimator(1.0f);
+        doSmoothScrollAnimator(1.0f);
     }
 
-    private void doAnimator(float target) {
-        if (isOnAnimator || onTouchMove) { //如果正在执行点击切换动画 或者 正在执行触摸移动
+    private void doSmoothScrollAnimator(float target) {
+        if (mScrollState != SCROLL_STATE_IDLE) {
             return;
         }
         if (target == 0)
             return;
 
-        isOnAnimator = true;
-        ValueAnimator animator = ValueAnimator.ofFloat(mOffset, mOffset + target);
-        animator.setDuration(300).start();
-        animator.setInterpolator(new AccelerateDecelerateInterpolator());
-        animator.addUpdateListener(new AnimatorUpdateListener() {
+        float initOffset = mOffset;
+        float targetOffset = initOffset + target;
+        if (!mLoopMode) { //target offset越界
+            int start = -mSiblingCount;
+            int end = mAdapter.getCount() - mSiblingCount - 1;
+            if (targetOffset < start) {
+                return;
+            } else if (targetOffset > end) {
+                return;
+            }
+        }
 
+        ValueAnimator animator = ValueAnimator.ofFloat(initOffset, targetOffset);
+        animator.setInterpolator(new AccelerateDecelerateInterpolator());
+        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator animation) {
                 attemptSetOffset((Float) animation.getAnimatedValue());
@@ -1048,26 +1061,46 @@ public class CoverFlowView extends RelativeLayout {
                 requestLayout();
             }
         });
-        animator.addListener(new Animator.AnimatorListener() {
-            @Override
-            public void onAnimationStart(Animator animation) {
-            }
-
+        animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationCancel(Animator animation) {
-                isOnAnimator = false;
-            }
-
-            @Override
-            public void onAnimationRepeat(Animator animation) {
+                setScrollState(SCROLL_STATE_IDLE);
             }
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                isOnAnimator = false;
+                setScrollState(SCROLL_STATE_IDLE);
             }
         });
-        mAnimator = animator;
+        mScrollAnimator = animator;
+        setScrollState(SCROLL_STATE_SETTLING);
+        animator.setDuration(300).start();
+    }
+
+    private void setScrollState(int state) {
+        if (state == mScrollState) {
+            return;
+        }
+        mScrollState = state;
+        if (state != SCROLL_STATE_SETTLING) {
+            stopScrollerInternal();
+        }
+    }
+
+    public void stopScroll() {
+        stopScrollerInternal();
+        setScrollState(SCROLL_STATE_IDLE);
+    }
+
+    private void stopScrollerInternal() {
+        endSettleAnimation();
+
+        if (mScrollAnimator != null)
+            mScrollAnimator.cancel();
+    }
+
+    public int getScrollState() {
+        return mScrollState;
     }
 
     /**
@@ -1075,19 +1108,18 @@ public class CoverFlowView extends RelativeLayout {
      *
      * @param selection seleciton
      * @param smooth    是否平滑滑动过去，还是直接切换
-     * @throws IndexOutOfBoundsException
      */
     public void setSelection(int selection, boolean smooth) {
+        if (mAdapter == null)
+            return;
+
+        int count = mAdapter.getCount();
+        if (selection < 0 || selection >= count) {
+            throw new IndexOutOfBoundsException(String.format(Locale.getDefault(),
+                    "selection out of bound: selection is %d, range is (%d, %d]", selection, 0,
+                    count));
+        }
         if (smooth) {
-            int count = mAdapter.getCount();
-            if (selection < 0 || selection >= count) {
-                throw new IndexOutOfBoundsException("selection out of bound!");
-            }
-
-            if (isOnAnimator || onTouchMove) { //如果正在执行点击切换动画 或者 正在执行触摸移动
-                return;
-            }
-
             float offset = mOffset;
             int curPos = getActuallyPosition((int) offset);
 
@@ -1095,7 +1127,7 @@ public class CoverFlowView extends RelativeLayout {
             //求出当前位置到达selection位置的最短路径
             int distance1 = selection - curPos;
 
-            if(mLoopMode) {
+            if (mLoopMode) {
                 int distance2 = selection + count - curPos;
                 int distance3 = selection - count - curPos;
                 minDistance = Math.abs(distance1) < Math.abs(distance2) ? distance1 : distance2;
@@ -1104,16 +1136,19 @@ public class CoverFlowView extends RelativeLayout {
                 minDistance = distance1;
             }
 
-            doAnimator(minDistance);
+            doSmoothScrollAnimator(minDistance);
         } else {
-            initChildren(selection);
+            cancelTouch();
+            stopScroll();
+
+            final int selectionIndex = selection - mSiblingCount;
+            mPostOffset = (float) selectionIndex;
+            lastMidIndex = selectionIndex;
+
+            mDataChanged = true;
             requestLayout();
         }
     }
-
-    private OnTopViewClickListener mTopViewClickLister;
-    private OnViewOnTopListener mViewOnTopListener;
-    private OnTopViewLongClickListener mTopViewLongClickLister;
 
     public OnViewOnTopListener getOnViewOnTopListener() {
         return mViewOnTopListener;
@@ -1147,28 +1182,52 @@ public class CoverFlowView extends RelativeLayout {
 
 
     public interface OnViewOnTopListener {
-
         void viewOnTop(int position, View itemView);
-
     }
 
     public interface OnTopViewClickListener {
-
         void onClick(int position, View itemView);
-
     }
 
     public interface OnTopViewLongClickListener {
-
         void onLongClick(int position, View itemView);
-
     }
 
-    class AdapterDataSetObserver extends DataSetObserver {
+    private class AdapterDataSetObserver extends DataSetObserver {
         @Override
-        public void onChanged() { //数据改变了，直接重新添加children
-            int mid = (int) Math.floor(mOffset + 0.5);
-            initChildren(getActuallyPosition(mid));
+        public void onChanged() {
+            // TODO 理应保持在合适的offset。保证只是数据集改变，位置不变。
+            stopScroll();
+            cancelTouch();
+            resetPosition();
+
+            mDataChanged = true;
+            requestLayout();
+        }
+
+        private float justifyOffset(float offset, int oldCount, int newCount) {
+            while (offset < 0 || offset >= oldCount) {
+                if (offset < 0) {
+                    offset += oldCount;
+                } else if (offset >= oldCount) {
+                    offset -= oldCount;
+                }
+            }
+            if (offset > newCount) {
+                offset = newCount;
+            }
+
+            return offset;
+        }
+
+        @Override
+        public void onInvalidated() {
+            stopScroll();
+            cancelTouch();
+            resetPosition();
+
+            mDataChanged = true;
+            requestLayout();
         }
     }
 }

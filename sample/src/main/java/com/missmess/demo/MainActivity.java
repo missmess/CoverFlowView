@@ -106,7 +106,11 @@ public class MainActivity extends AppCompatActivity {
         switch (v.getId()) {
             case R.id.button:
                 if(adapter != null) {
-                    adapter.setTips(new int[]{R.string.new_cover_tip0, R.string.new_cover_tip1, R.string.new_cover_tip2, R.string.new_cover_tip3, R.string.new_cover_tip4, R.string.app_name});
+                    if (adapter.getTips() == MyCoverFlowAdapter.InitialTips) {
+                        adapter.setTips(MyCoverFlowAdapter.NewTips);
+                    } else {
+                        adapter.setTips(MyCoverFlowAdapter.InitialTips);
+                    }
                     adapter.notifyDataSetChanged();
                 }
                 break;

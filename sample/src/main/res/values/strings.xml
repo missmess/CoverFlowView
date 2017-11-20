@@ -23,5 +23,5 @@
     <string name="new_cover_tip3">New 3</string>
     <string name="new_cover_tip4">New 4</string>
 
-    <string name="circle">WeChat Circle\nIndex %d</string>
+    <string name="circle">Clickable Button\nIndex %d</string>
 </resources>
