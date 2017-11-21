@@ -5,15 +5,14 @@ import android.content.res.TypedArray;
 import android.database.DataSetObserver;
 import android.graphics.Rect;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AnimationUtils;
-import android.widget.RelativeLayout;
 
 import com.nineoldandroids.animation.Animator;
 import com.nineoldandroids.animation.AnimatorListenerAdapter;
@@ -24,9 +23,11 @@ import java.util.Locale;
 
 /**
  * 将一组view以CoverFlow效果展示出来。
- *
+ *  * <p>目前的实现是使用{@link #mOffset}来对应滑动量，所有的操作都会触发onLayout方法的调用。在onLayout方法中做view的添加，
+ *  移除，变换等所有操作。</p>
+ * <p>
  * <p>原理：假设一屏可显示的view数目为totalVis = 2 * vis + 1（始终为奇数）。左右两边最多显示vis个
- * view。adapter的个数为count;
+ * view。adapter的个数为count:
  * <ol>
  *     <li>adapter中的item将按顺序排列在CoverFlowView中。初始显示的一组view为adapter中position为
  *     0~totalVis的item，并且最中间的view设index = 0，即index=0对应position=vis。
@@ -45,7 +46,7 @@ import java.util.Locale;
  * </p>
  *
  */
-public class CoverFlowView extends RelativeLayout {
+public class CoverFlowView extends ViewGroup {
 
     public enum CoverFlowGravity {
         TOP, BOTTOM, CENTER_VERTICAL
@@ -238,6 +239,7 @@ public class CoverFlowView extends RelativeLayout {
 
     /**
      * 调整offset偏移量为delta，用来保证触摸事件保持连贯。
+     *
      * @param delta 偏移量
      */
     private void justifyOffset(int delta) {
@@ -248,7 +250,8 @@ public class CoverFlowView extends RelativeLayout {
 
     /**
      * 创建children view，添加到空间中，并缓存在集合中。
-     * @param inLayout 是否在onLayout中调用
+     *
+     * @param inLayout           是否在onLayout中调用
      * @param midAdapterPosition 中间的view对应的adapter position
      */
     private void applyLayoutChildren(boolean inLayout, int midAdapterPosition) {
@@ -302,9 +305,9 @@ public class CoverFlowView extends RelativeLayout {
                         zpos = 0;
                     }
                     if (inLayout) {
-                        LayoutParams params = (LayoutParams) view.getLayoutParams();
+                        LayoutParams params = view.getLayoutParams();
                         if (params == null) {
-                            params = (LayoutParams) generateDefaultLayoutParams();
+                            params = generateDefaultLayoutParams();
                         }
                         addViewInLayout(view, zpos, params);
                     } else {
@@ -345,7 +348,6 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-//        Log.v("CoverFlowView", "onMeasure");
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (mAdapter == null || showViewArray.size() <= 0) {
@@ -470,9 +472,9 @@ public class CoverFlowView extends RelativeLayout {
                     int actuallyPositionEnd = convertIndex2Position(mid + rightCount);
                     View viewItem = adapter.getView(actuallyPositionEnd, view, this);
                     showViewArray.put(actuallyPositionEnd, viewItem);
-                    LayoutParams params = (LayoutParams) viewItem.getLayoutParams();
+                    LayoutParams params = viewItem.getLayoutParams();
                     if (params == null) {
-                        params = (LayoutParams) generateDefaultLayoutParams();
+                        params = generateDefaultLayoutParams();
                     }
                     addViewInLayout(viewItem, 0, params);
                 }
@@ -493,9 +495,9 @@ public class CoverFlowView extends RelativeLayout {
                     int actuallyPositionStart = convertIndex2Position(mid - leftCount);
                     View viewItem = adapter.getView(actuallyPositionStart, view, this);
                     showViewArray.put(actuallyPositionStart, viewItem);
-                    LayoutParams params = (LayoutParams) viewItem.getLayoutParams();
+                    LayoutParams params = viewItem.getLayoutParams();
                     if (params == null) {
-                        params = (LayoutParams) generateDefaultLayoutParams();
+                        params = generateDefaultLayoutParams();
                     }
                     addViewInLayout(viewItem, 0, params);
                 }
@@ -521,13 +523,23 @@ public class CoverFlowView extends RelativeLayout {
         for (i = endPos; i >= mid; i--) {
             layoutRightChild(i, i - offset);
         }
-         // on top
+
+        postViewOnTop();
+    }
+
+    private void postViewOnTop() {
+        final float offset = mOffset;
         if ((offset - (int) offset) == 0.0f) {
             int top = convertIndex2Position((int) offset);
             if (top != mViewOnTopPosition) {
                 mViewOnTopPosition = top;
-                if (mViewOnTopListener != null)
-                    mViewOnTopListener.viewOnTop(top, getTopView());
+                post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (mViewOnTopListener != null)
+                            mViewOnTopListener.viewOnTop(mViewOnTopPosition, getTopView());
+                    }
+                });
             }
         }
     }
@@ -748,7 +760,7 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        Log.d("CoverFlowView", event.toString());
+        //        Log.d("CoverFlowView", event.toString());
         int action = event.getAction();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
@@ -827,7 +839,7 @@ public class CoverFlowView extends RelativeLayout {
     private void cancelTouch() {
         mTouchCanceled = true;
         setScrollState(SCROLL_STATE_IDLE);
-         // 移除long click
+        // 移除long click
         removeLongClickAction();
     }
 
