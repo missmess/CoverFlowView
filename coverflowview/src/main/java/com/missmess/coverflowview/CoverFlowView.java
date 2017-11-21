@@ -233,7 +233,6 @@ public class CoverFlowView extends RelativeLayout {
         mOffset = 0f;
         lastMidIndex = 0;
         mStartOffset = 0;
-        mViewOnTopPosition = -1;
     }
 
     /**
@@ -1196,38 +1195,17 @@ public class CoverFlowView extends RelativeLayout {
     private class AdapterDataSetObserver extends DataSetObserver {
         @Override
         public void onChanged() {
-            // TODO 理应保持在合适的offset。保证只是数据集改变，位置不变。
             stopScroll();
             cancelTouch();
             resetPosition();
 
             mDataChanged = true;
             requestLayout();
-        }
-
-        private float justifyOffset(float offset, int oldCount, int newCount) {
-            while (offset < 0 || offset >= oldCount) {
-                if (offset < 0) {
-                    offset += oldCount;
-                } else if (offset >= oldCount) {
-                    offset -= oldCount;
-                }
-            }
-            if (offset > newCount) {
-                offset = newCount;
-            }
-
-            return offset;
         }
 
         @Override
         public void onInvalidated() {
-            stopScroll();
-            cancelTouch();
-            resetPosition();
-
-            mDataChanged = true;
-            requestLayout();
+            onChanged();
         }
     }
 }
