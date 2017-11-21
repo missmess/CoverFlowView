@@ -19,10 +19,16 @@ public abstract class ACoverFlowAdapter<T extends ACoverFlowAdapter.ViewHolder> 
         mDataSetObservable.unregisterObserver(observer);
     }
 
+    /**
+     * CoverFlowView数据集发生改变，刷新，尽量保留状态且不影响滑动事件
+     */
     public void notifyDataSetChanged() {
         mDataSetObservable.notifyChanged();
     }
 
+    /**
+     * CoverFlowView重绘刷新。重置CoverFlowView的所有状态。
+     */
     public void notifyDataSetInvalidated() {
         mDataSetObservable.notifyInvalidated();
     }

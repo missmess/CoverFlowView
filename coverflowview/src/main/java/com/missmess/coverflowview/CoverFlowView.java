@@ -5,6 +5,7 @@ import android.content.res.TypedArray;
 import android.database.DataSetObserver;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -29,7 +30,7 @@ import java.util.Locale;
  * <ol>
  *     <li>adapter中的item将按顺序排列在CoverFlowView中。初始显示的一组view为adapter中position为
  *     0~totalVis的item，并且最中间的view设index = 0，即index=0对应position=vis。
- *     参考 {@link #getActuallyPosition(int)}</li>
+ *     参考 {@link #convertIndex2Position(int)}</li>
  *     <li>index从左到右增大。在loop模式下，index没有取值范围。在非loop模式，index取值范围
  *     为[-vis, count-vis-1]</li>
  *     <li>内部使用{@link #showViewArray}存储正显示在CoverFlowView上的item。这个map以
@@ -90,6 +91,7 @@ public class CoverFlowView extends RelativeLayout {
     // 左右两边显示的个数
     protected int mSiblingCount = 1;
     private float mOffset = 0f;
+    private int mExpectedAdapterCount = 0;
 
     private int paddingLeft;
     private int paddingRight;
@@ -125,10 +127,9 @@ public class CoverFlowView extends RelativeLayout {
     private OnTopViewLongClickListener mTopViewLongClickLister;
 
     private boolean mDataChanged = false;
-    private Float mPostOffset;
 
     private boolean mLoopMode;
-    int lastMidIndex = -1; //最近的中间view的offset值
+    int lastMidIndex = -1; //最近的中间view的offset值，滑动时改变
     int mViewOnTopPosition = -1; // view处于顶部选中状态的的position，-1代表无
 
     private View touchViewItem = null;
@@ -226,13 +227,23 @@ public class CoverFlowView extends RelativeLayout {
             mLayoutMode = CoverFlowLayoutMode.WRAP_CONTENT;
         }
 
-        resetPosition();
+        resetOffset();
     }
 
-    private void resetPosition() {
+    private void resetOffset() {
         mOffset = 0f;
         lastMidIndex = 0;
-        mStartOffset = 0;
+        mStartOffset = 0f;
+    }
+
+    /**
+     * 调整offset偏移量为delta，用来保证触摸事件保持连贯。
+     * @param delta 偏移量
+     */
+    private void justifyOffset(int delta) {
+        mOffset += (float) delta;
+        lastMidIndex = (int) Math.floor(mOffset + 0.5);
+        mStartOffset += (float) delta;
     }
 
     /**
@@ -250,11 +261,12 @@ public class CoverFlowView extends RelativeLayout {
         ACoverFlowAdapter adapter = mAdapter;
 
         if (adapter != null) {
+            assertAdapterDataSetValidate();
+
             int count = adapter.getCount();
             if (count == 0) {
                 return;
             }
-
             if (count < mVisibleChildCount) {
                 throw new IllegalArgumentException("adapter's count must be greater than visible views number");
             }
@@ -262,41 +274,41 @@ public class CoverFlowView extends RelativeLayout {
             SparseArray<View> temp = new SparseArray<>();
             for (int i = 0, j = (midAdapterPosition - mSiblingCount); i < mVisibleChildCount && i < count; ++i, ++j) {
                 View convertView;
-                int index = -1;
+                int position = -1;
                 View view;
                 if (j < 0) {
                     if (mLoopMode) {
-                        index = count + j;
+                        position = count + j;
 
                     }
                 } else if (j >= count) {
                     if (mLoopMode) {
-                        index = j - count;
+                        position = j - count;
                     }
                 } else {
-                    index = j;
+                    position = j;
                 }
 
-                if (index != -1) { //需要获取view
-                    convertView = showViewArray.get(index);
-                    view = mAdapter.getView(index, convertView, this);
-                    temp.put(index, view);
+                if (position != -1) { //需要获取view
+                    convertView = showViewArray.get(position);
+                    view = mAdapter.getView(position, convertView, this);
+                    temp.put(position, view);
 
                     //按Z轴顺序添加view，保持层叠效果
-                    int pos;
+                    int zpos;
                     if (i <= mSiblingCount) {
-                        pos = -1;
+                        zpos = -1;
                     } else {
-                        pos = 0;
+                        zpos = 0;
                     }
                     if (inLayout) {
                         LayoutParams params = (LayoutParams) view.getLayoutParams();
                         if (params == null) {
                             params = (LayoutParams) generateDefaultLayoutParams();
                         }
-                        addViewInLayout(view, pos, params);
+                        addViewInLayout(view, zpos, params);
                     } else {
-                        addView(view, pos);
+                        addView(view, zpos);
                     }
                 }
             }
@@ -314,6 +326,20 @@ public class CoverFlowView extends RelativeLayout {
                     }
                 });
             }
+        }
+    }
+
+    private void assertAdapterDataSetValidate() {
+        if (mAdapter == null)
+            return;
+
+        int count = mAdapter.getCount();
+        if (count != mExpectedAdapterCount) {
+            throw new IllegalStateException("The ACoverFlowAdapter changed the adapter's" +
+                    " contents without calling ACoverFlowAdapter#notifyDataSetChanged!" +
+                    " Expected adapter item count: " + mExpectedAdapterCount + ", found: " + count +
+                    " Pager class: " + getClass() +
+                    " Problematic adapter: " + mAdapter.getClass());
         }
     }
 
@@ -420,13 +446,7 @@ public class CoverFlowView extends RelativeLayout {
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
 //        Log.v("CoverFlowView", "onLayout");
         ACoverFlowAdapter adapter = mAdapter;
-        float offset;
-        if (mDataChanged && mPostOffset != null) {
-            offset = mPostOffset;
-            mPostOffset = null;
-        } else {
-            offset = mOffset;
-        }
+        float offset = mOffset;
         int mid = (int) Math.floor(offset + 0.5);
         //右边孩子的数量
         int rightCount = mSiblingCount;
@@ -434,11 +454,12 @@ public class CoverFlowView extends RelativeLayout {
         int leftCount = mSiblingCount;
 
         if (mDataChanged) {
-            applyLayoutChildren(true, getActuallyPosition(mid));
+            applyLayoutChildren(true, convertIndex2Position(mid));
             mDataChanged = false;
         } else {
             if (lastMidIndex + 1 == mid) { //右滑至item出现了
-                int actuallyPositionStart = getActuallyPosition(lastMidIndex - leftCount);
+                assertAdapterDataSetValidate();
+                int actuallyPositionStart = convertIndex2Position(lastMidIndex - leftCount);
                 View view = showViewArray.get(actuallyPositionStart);
                 showViewArray.remove(actuallyPositionStart);
                 removeViewInLayout(view);
@@ -446,7 +467,7 @@ public class CoverFlowView extends RelativeLayout {
                 // 非loop模式下，index<=count-vis-1。所以mid<=count-vis-1-vis
                 boolean avail = mid <= (adapter.getCount() - mSiblingCount - 1) - mSiblingCount;
                 if (mLoopMode || avail) {
-                    int actuallyPositionEnd = getActuallyPosition(mid + rightCount);
+                    int actuallyPositionEnd = convertIndex2Position(mid + rightCount);
                     View viewItem = adapter.getView(actuallyPositionEnd, view, this);
                     showViewArray.put(actuallyPositionEnd, viewItem);
                     LayoutParams params = (LayoutParams) viewItem.getLayoutParams();
@@ -456,11 +477,12 @@ public class CoverFlowView extends RelativeLayout {
                     addViewInLayout(viewItem, 0, params);
                 }
 
-                int actuallyPositionMid = getActuallyPosition(mid);
+                int actuallyPositionMid = convertIndex2Position(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
                 midView.bringToFront();
             } else if (lastMidIndex - 1 == mid) { //左滑至item出现了
-                int actuallyPositionEnd = getActuallyPosition(lastMidIndex + rightCount);
+                assertAdapterDataSetValidate();
+                int actuallyPositionEnd = convertIndex2Position(lastMidIndex + rightCount);
                 View view = showViewArray.get(actuallyPositionEnd);
                 showViewArray.remove(actuallyPositionEnd);
                 removeViewInLayout(view);
@@ -468,7 +490,7 @@ public class CoverFlowView extends RelativeLayout {
                 // 非loop模式下，index>=-vis。所以mid>=-vis+vis
                 boolean avail = mid >= 0;
                 if (mLoopMode || avail) {
-                    int actuallyPositionStart = getActuallyPosition(mid - leftCount);
+                    int actuallyPositionStart = convertIndex2Position(mid - leftCount);
                     View viewItem = adapter.getView(actuallyPositionStart, view, this);
                     showViewArray.put(actuallyPositionStart, viewItem);
                     LayoutParams params = (LayoutParams) viewItem.getLayoutParams();
@@ -478,7 +500,7 @@ public class CoverFlowView extends RelativeLayout {
                     addViewInLayout(viewItem, 0, params);
                 }
 
-                int actuallyPositionMid = getActuallyPosition(mid);
+                int actuallyPositionMid = convertIndex2Position(mid);
                 View midView = showViewArray.get(actuallyPositionMid);
                 midView.bringToFront();
             }
@@ -501,7 +523,7 @@ public class CoverFlowView extends RelativeLayout {
         }
          // on top
         if ((offset - (int) offset) == 0.0f) {
-            int top = getActuallyPosition((int) offset);
+            int top = convertIndex2Position((int) offset);
             if (top != mViewOnTopPosition) {
                 mViewOnTopPosition = top;
                 if (mViewOnTopListener != null)
@@ -512,7 +534,7 @@ public class CoverFlowView extends RelativeLayout {
 
     private View layoutLeftChild(int position, float offset) {
         //获取实际的position
-        int actuallyPosition = getActuallyPosition(position);
+        int actuallyPosition = convertIndex2Position(position);
         View child = showViewArray.get(actuallyPosition);
         if (child != null) {
             makeChildTransformer(child, actuallyPosition, offset);
@@ -522,7 +544,7 @@ public class CoverFlowView extends RelativeLayout {
 
     private View layoutRightChild(int position, float offset) {
         //获取实际的position
-        int actuallyPosition = getActuallyPosition(position);
+        int actuallyPosition = convertIndex2Position(position);
         View child = showViewArray.get(actuallyPosition);
         if (child != null) {
             makeChildTransformer(child, actuallyPosition, offset);
@@ -630,7 +652,7 @@ public class CoverFlowView extends RelativeLayout {
      * @return int
      */
     public int getTopViewPosition() {
-        return getActuallyPosition(lastMidIndex);
+        return convertIndex2Position(lastMidIndex);
     }
 
     /**
@@ -648,12 +670,13 @@ public class CoverFlowView extends RelativeLayout {
      * @param index index in CoverFlowView
      * @return adapter position
      */
-    private int getActuallyPosition(int index) {
-        if (mAdapter == null)
-            return index;
-        int count = mAdapter.getCount();
-
+    private int convertIndex2Position(int index) {
         int position = index + mSiblingCount;
+
+        if (mAdapter == null)
+            return position;
+
+        int count = mAdapter.getCount();
         while (position < 0 || position >= count) {
             if (position < 0) {
                 position += count;
@@ -665,6 +688,10 @@ public class CoverFlowView extends RelativeLayout {
         return position;
     }
 
+    private int convertPosition2Index(int position) {
+        return position - mSiblingCount;
+    }
+
     public void setAdapter(ACoverFlowAdapter adapter) {
         ACoverFlowAdapter old = mAdapter;
         if (old != null) {
@@ -673,14 +700,17 @@ public class CoverFlowView extends RelativeLayout {
 
         stopScroll();
         cancelTouch();
-        resetPosition();
+        resetOffset();
+
+        mExpectedAdapterCount = 0;
 
         mAdapter = adapter;
-        if (mDataSetObserver == null) {
-            mDataSetObserver = new AdapterDataSetObserver();
-        }
         if (adapter != null) {
+            if (mDataSetObserver == null) {
+                mDataSetObserver = new AdapterDataSetObserver();
+            }
             adapter.registerDataSetObserver(mDataSetObserver);
+            mExpectedAdapterCount = adapter.getCount();
         }
 
         onAdapterChanged(old, adapter);
@@ -707,11 +737,6 @@ public class CoverFlowView extends RelativeLayout {
         int action = event.getAction();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                if (mScrollState == SCROLL_STATE_SETTLING) {
-                    setScrollState(SCROLL_STATE_DRAGGING);
-                }
-                mTouchCanceled = false;
-
                 touchViewItem = getTopView();
                 isOnTopView = inRangeOfView(touchViewItem, event);
                 // 如果触摸位置不在顶部view内，直接消费这个event。
@@ -723,9 +748,17 @@ public class CoverFlowView extends RelativeLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        Log.d("CoverFlowView", event.toString());
         int action = event.getAction();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
+                // 注意，只在CoverFlowView拦截的情况下执行
+                // 如果正在settling，停止settle，改为触摸。
+                if (mScrollState == SCROLL_STATE_SETTLING) {
+                    setScrollState(SCROLL_STATE_DRAGGING);
+                }
+                mTouchCanceled = false;
+
                 touchBegan(event);
 
                 if (isOnTopView) {
@@ -1008,7 +1041,7 @@ public class CoverFlowView extends RelativeLayout {
 
         stopScroll();
         cancelTouch();
-        resetPosition();
+        resetOffset();
 
         this.mLoopMode = loop;
 
@@ -1120,7 +1153,7 @@ public class CoverFlowView extends RelativeLayout {
         }
         if (smooth) {
             float offset = mOffset;
-            int curPos = getActuallyPosition((int) offset);
+            int curPos = convertIndex2Position((int) offset);
 
             int minDistance;
             //求出当前位置到达selection位置的最短路径
@@ -1140,13 +1173,51 @@ public class CoverFlowView extends RelativeLayout {
             cancelTouch();
             stopScroll();
 
-            final int selectionIndex = selection - mSiblingCount;
-            mPostOffset = (float) selectionIndex;
-            lastMidIndex = selectionIndex;
+            final int selectionIndex = convertPosition2Index(selection);
+            resetOffset();
+            justifyOffset(selectionIndex);
 
             mDataChanged = true;
             requestLayout();
         }
+    }
+
+    private void dataSetChanged(boolean invalidate) {
+        if (!invalidate) {
+            int oldCount = mExpectedAdapterCount;
+            int newCount = mAdapter.getCount();
+            final float offset = mOffset;
+            int delta = calculateOffsetDelta(offset, oldCount, newCount);
+            justifyOffset(delta);
+        } else {
+            stopScroll();
+            cancelTouch();
+            resetOffset();
+        }
+
+        mExpectedAdapterCount = mAdapter.getCount();
+        mDataChanged = true;
+        requestLayout();
+    }
+
+    private int calculateOffsetDelta(float offset, int oldCount, int newCount) {
+        int mid = (int) Math.floor(offset + 0.5);
+
+        int midPosition = mid + mSiblingCount;
+        while (midPosition < 0 || midPosition >= oldCount) {
+            if (midPosition < 0) {
+                midPosition += oldCount;
+            } else if (midPosition >= oldCount) {
+                midPosition -= oldCount;
+            }
+        }
+
+        if (midPosition > newCount - 1) {
+            midPosition = newCount - 1;
+        }
+
+        int newMid = convertPosition2Index(midPosition);
+        return newMid - mid;
     }
 
     public OnViewOnTopListener getOnViewOnTopListener() {
@@ -1179,7 +1250,6 @@ public class CoverFlowView extends RelativeLayout {
         return this.mTopViewLongClickLister;
     }
 
-
     public interface OnViewOnTopListener {
         void viewOnTop(int position, View itemView);
     }
@@ -1195,17 +1265,12 @@ public class CoverFlowView extends RelativeLayout {
     private class AdapterDataSetObserver extends DataSetObserver {
         @Override
         public void onChanged() {
-            stopScroll();
-            cancelTouch();
-            resetPosition();
-
-            mDataChanged = true;
-            requestLayout();
+            dataSetChanged(false);
         }
 
         @Override
         public void onInvalidated() {
-            onChanged();
+            dataSetChanged(true);
         }
     }
 }
