@@ -139,6 +139,7 @@ public class CoverFlowView extends ViewGroup {
     private Runnable longClickRunnable = null;
 
     private boolean mTouchCanceled = false;
+    private int mScrollPointerId;
     private float mTouchStartPos;
     private float mTouchStartX;
     private float mTouchStartY;
@@ -760,8 +761,8 @@ public class CoverFlowView extends ViewGroup {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        //        Log.d("CoverFlowView", event.toString());
-        int action = event.getAction();
+//        Log.d("CoverFlowView", event.toString());
+        int action = event.getActionMasked();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 // 注意，只在CoverFlowView拦截的情况下执行
@@ -776,6 +777,9 @@ public class CoverFlowView extends ViewGroup {
                 if (isOnTopView) {
                     sendLongClickAction();
                 }
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                touchPointDown(event);
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mTouchCanceled) {
@@ -799,6 +803,9 @@ public class CoverFlowView extends ViewGroup {
                     }
                 }
 
+                break;
+            case MotionEvent.ACTION_POINTER_UP:
+                touchPointUp(event);
                 break;
             case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_UP:
@@ -869,6 +876,7 @@ public class CoverFlowView extends ViewGroup {
         endSettleAnimation();
 
         float x = event.getX();
+        mScrollPointerId = event.getPointerId(0);
         mTouchStartX = x;
         mTouchStartY = event.getY();
         mStartTime = AnimationUtils.currentAnimationTimeMillis();
@@ -881,8 +889,21 @@ public class CoverFlowView extends ViewGroup {
         mVelocity.addMovement(event);
     }
 
+    private void touchPointDown(MotionEvent event) {
+        int actionIndex = event.getActionIndex();
+        mScrollPointerId = event.getPointerId(actionIndex);
+        float x = mTouchStartX = event.getX(actionIndex);
+        mTouchStartY = event.getY(actionIndex);
+
+        mTouchStartPos = (x / mWidth) * MOVE_POS_MULTIPLE - 5;
+        mTouchStartPos /= 2;
+        mStartOffset = mOffset;
+    }
+
     private void touchMoved(MotionEvent event) {
-        float pos = (event.getX() / mWidth) * MOVE_POS_MULTIPLE - 5;
+//        Log.i("CoverFlowView", "ScrollPointId = " + mScrollPointerId);
+        int index = event.findPointerIndex(mScrollPointerId);
+        float pos = (event.getX(index) / mWidth) * MOVE_POS_MULTIPLE - 5;
         pos /= 2;
 
         attemptSetOffset(mStartOffset + mTouchStartPos - pos);
@@ -890,6 +911,22 @@ public class CoverFlowView extends ViewGroup {
         invalidate();
         requestLayout();
         mVelocity.addMovement(event);
+    }
+
+    private void touchPointUp(MotionEvent event) {
+        int actionIndex = event.getActionIndex();
+//        Log.d("CoverFlowView", "point index = " + actionIndex);
+        if (event.getPointerId(actionIndex) == mScrollPointerId) {
+            // 选择一个新的触控点处理接下来的事件
+            int newIndex = actionIndex == 0 ? 1 : 0;
+            mScrollPointerId = event.getPointerId(newIndex);
+            float x = mTouchStartX = event.getX(newIndex);
+            mTouchStartY = event.getY(newIndex);
+
+            mTouchStartPos = (x / mWidth) * MOVE_POS_MULTIPLE - 5;
+            mTouchStartPos /= 2;
+            mStartOffset = mOffset;
+        }
     }
 
     private void touchEnded(MotionEvent event) {
