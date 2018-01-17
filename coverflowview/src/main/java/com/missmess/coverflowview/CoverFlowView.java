@@ -532,6 +532,9 @@ public class CoverFlowView extends ViewGroup {
         final float offset = mOffset;
         if ((offset - (int) offset) == 0.0f) {
             int top = convertIndex2Position((int) offset);
+            if (showViewArray.indexOfKey(top) == -1) // 不存在view
+                return;
+
             if (top != mViewOnTopPosition) {
                 mViewOnTopPosition = top;
                 post(new Runnable() {
