@@ -3,7 +3,7 @@ apply plugin: 'com.github.dcendents.android-maven'
 apply plugin: 'com.jfrog.bintray'
 
 group = "com.missmess.coverflowview"
-version = "1.2.5"
+version = "1.2.6"
 
 
 android {

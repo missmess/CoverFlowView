@@ -26,14 +26,14 @@ import java.util.Locale;
  *  * <p>目前的实现是使用{@link #mOffset}来对应滑动量，所有的操作都会触发onLayout方法的调用。在onLayout方法中做view的添加，
  *  移除，变换等所有操作。</p>
  * <p>
- * <p>原理：假设一屏可显示的view数目为totalVis = 2 * vis + 1（始终为奇数）。左右两边最多显示vis个
+ * <p>原理：假设一屏可显示的view数目为totalVis = 2 * sib + 1（始终为奇数）。左右两边最多显示sib个
  * view。adapter的个数为count:
  * <ol>
  *     <li>adapter中的item将按顺序排列在CoverFlowView中。初始显示的一组view为adapter中position为
- *     0~totalVis的item，并且最中间的view设index = 0，即index=0对应position=vis。
+ *     0~totalVis的item，并且最中间的view设index = 0，即index=0对应position=sib。
  *     参考 {@link #convertIndex2Position(int)}</li>
  *     <li>index从左到右增大。在loop模式下，index没有取值范围。在非loop模式，index取值范围
- *     为[-vis, count-vis-1]</li>
+ *     为[-sib, count-sib-1]</li>
  *     <li>内部使用{@link #showViewArray}存储正显示在CoverFlowView上的item。这个map以
  *     adapter position作为key存储view</li>
  *     <li>CoverFlowView通过{@link #addView(View, int)}的index order来控制CoverFlow的层叠效果。
@@ -129,7 +129,10 @@ public class CoverFlowView extends ViewGroup {
 
     private boolean mDataChanged = false;
 
+    // loop 模式
     private boolean mLoopMode;
+    // 即使在loop模式下，不一定我们就支持loop（如当adapter数量小于可见数目时）
+    private boolean mShouldLoop;
     int lastMidIndex = -1; //最近的中间view的offset值，滑动时改变
     int mViewOnTopPosition = -1; // view处于顶部选中状态的的position，-1代表无
 
@@ -153,6 +156,11 @@ public class CoverFlowView extends ViewGroup {
     private boolean clickSwitchEnable = true;
     private ValueAnimator mScrollAnimator;
     private VelocityTracker mVelocity;
+
+    // index的一个有效的取值范围，loop时代表初始的取值范围
+    private int mLeftEdgeIndex, mRightEdgeIndex;
+    // index与position之间的通常的一个差值
+    private int mGapBetweenPositionAndIndex;
 
     public CoverFlowView(Context context) {
         super(context);
@@ -188,7 +196,7 @@ public class CoverFlowView extends ViewGroup {
         mSiblingCount = totalVisibleChildren >> 1; // 计算出左右两两边的显示个数
         mVisibleChildCount = totalVisibleChildren;
 
-        mLoopMode = a.getBoolean(R.styleable.CoverFlowView_loopMode, true);
+        mShouldLoop = mLoopMode = a.getBoolean(R.styleable.CoverFlowView_loopMode, true);
 
         float scaleRatio = a.getFraction(R.styleable.CoverFlowView_scaleRatio, 1, 1, -1f);
         if (scaleRatio == -1) {
@@ -250,7 +258,7 @@ public class CoverFlowView extends ViewGroup {
     }
 
     /**
-     * 创建children view，添加到空间中，并缓存在集合中。
+     * 创建children view，添加到控件中，并缓存在集合中。
      *
      * @param inLayout           是否在onLayout中调用
      * @param midAdapterPosition 中间的view对应的adapter position
@@ -271,22 +279,19 @@ public class CoverFlowView extends ViewGroup {
             if (count == 0) {
                 return;
             }
-            if (count < mVisibleChildCount) {
-                throw new IllegalArgumentException("adapter's count must be greater than visible views number");
-            }
 
             SparseArray<View> temp = new SparseArray<>();
-            for (int i = 0, j = (midAdapterPosition - mSiblingCount); i < mVisibleChildCount && i < count; ++i, ++j) {
+            for (int i = 0, j = (midAdapterPosition - mSiblingCount); i < mVisibleChildCount; ++i, ++j) {
                 View convertView;
                 int position = -1;
                 View view;
                 if (j < 0) {
-                    if (mLoopMode) {
+                    if (mShouldLoop) {
                         position = count + j;
 
                     }
                 } else if (j >= count) {
-                    if (mLoopMode) {
+                    if (mShouldLoop) {
                         position = j - count;
                     }
                 } else {
@@ -344,6 +349,28 @@ public class CoverFlowView extends ViewGroup {
                     " Expected adapter item count: " + mExpectedAdapterCount + ", found: " + count +
                     " Pager class: " + getClass() +
                     " Problematic adapter: " + mAdapter.getClass());
+        }
+    }
+
+    private void checkShouldLoopAndEdge() {
+        if (mAdapter == null)
+            return;
+
+        int count = mAdapter.getCount();
+        if (count < mVisibleChildCount) {
+            // 条数不足，无法正常处理loop
+            mShouldLoop = false;
+
+            int left = count >> 1;
+            mGapBetweenPositionAndIndex = left;
+            mLeftEdgeIndex = -left;
+            mRightEdgeIndex = mLeftEdgeIndex + count - 1;
+        } else {
+            mShouldLoop = mLoopMode;
+
+            mGapBetweenPositionAndIndex = mSiblingCount;
+            mLeftEdgeIndex = -mSiblingCount;
+            mRightEdgeIndex = mLeftEdgeIndex + count - 1;
         }
     }
 
@@ -457,19 +484,28 @@ public class CoverFlowView extends ViewGroup {
         int leftCount = mSiblingCount;
 
         if (mDataChanged) {
-            applyLayoutChildren(true, convertIndex2Position(mid));
+            // 数据改变时，检查可否loop，计算index边界值
+            checkShouldLoopAndEdge();
+
+            int adapterPosition = convertIndex2Position(mid);
+            if (adapterPosition != -1) {
+                applyLayoutChildren(true, adapterPosition);
+            }
             mDataChanged = false;
         } else {
             if (lastMidIndex + 1 == mid) { //右滑至item出现了
                 assertAdapterDataSetValidate();
                 int actuallyPositionStart = convertIndex2Position(lastMidIndex - leftCount);
-                View view = showViewArray.get(actuallyPositionStart);
-                showViewArray.remove(actuallyPositionStart);
-                removeViewInLayout(view);
+                View view = null;
+                if (actuallyPositionStart != -1) {
+                    view = showViewArray.get(actuallyPositionStart);
+                    showViewArray.remove(actuallyPositionStart);
+                    removeViewInLayout(view);
+                }
 
-                // 非loop模式下，index<=count-vis-1。所以mid<=count-vis-1-vis
-                boolean avail = mid <= (adapter.getCount() - mSiblingCount - 1) - mSiblingCount;
-                if (mLoopMode || avail) {
+                // 非loop模式下，index<=mRightEdgeIndex。所以只有当mid<=mRightEdgeIndex-sib时，才去获取最右边的view
+                boolean toGet = mid <= mRightEdgeIndex - mSiblingCount;
+                if (mShouldLoop || toGet) {
                     int actuallyPositionEnd = convertIndex2Position(mid + rightCount);
                     View viewItem = adapter.getView(actuallyPositionEnd, view, this);
                     showViewArray.put(actuallyPositionEnd, viewItem);
@@ -486,13 +522,16 @@ public class CoverFlowView extends ViewGroup {
             } else if (lastMidIndex - 1 == mid) { //左滑至item出现了
                 assertAdapterDataSetValidate();
                 int actuallyPositionEnd = convertIndex2Position(lastMidIndex + rightCount);
-                View view = showViewArray.get(actuallyPositionEnd);
-                showViewArray.remove(actuallyPositionEnd);
-                removeViewInLayout(view);
+                View view = null;
+                if (actuallyPositionEnd != -1) {
+                    view = showViewArray.get(actuallyPositionEnd);
+                    showViewArray.remove(actuallyPositionEnd);
+                    removeViewInLayout(view);
+                }
 
-                // 非loop模式下，index>=-vis。所以mid>=-vis+vis
-                boolean avail = mid >= 0;
-                if (mLoopMode || avail) {
+                // 非loop模式下，index>=mLeftEdgeIndex。所以mid>=mLeftEdgeIndex+sib时，才去获取最左边的view
+                boolean toGet = mid >= mLeftEdgeIndex + mSiblingCount;
+                if (mShouldLoop || toGet) {
                     int actuallyPositionStart = convertIndex2Position(mid - leftCount);
                     View viewItem = adapter.getView(actuallyPositionStart, view, this);
                     showViewArray.put(actuallyPositionStart, viewItem);
@@ -684,20 +723,30 @@ public class CoverFlowView extends ViewGroup {
      * Convert our index to adapter position.
      *
      * @param index index in CoverFlowView
-     * @return adapter position
+     * @return adapter position, -1 for illegal index
      */
     private int convertIndex2Position(int index) {
-        int position = index + mSiblingCount;
+        if (mAdapter == null) {
+            return index + mGapBetweenPositionAndIndex;
+        }
 
-        if (mAdapter == null)
-            return position;
+        return convertIndex2Position(index, mAdapter.getCount());
+    }
 
-        int count = mAdapter.getCount();
-        while (position < 0 || position >= count) {
-            if (position < 0) {
-                position += count;
-            } else if (position >= count) {
-                position -= count;
+    private int convertIndex2Position(int index, int count) {
+        int position = index + mGapBetweenPositionAndIndex;
+
+        if (mShouldLoop) {
+            while (position < 0 || position >= count) {
+                if (position < 0) {
+                    position += count;
+                } else if (position >= count) {
+                    position -= count;
+                }
+            }
+        } else {
+            if (position < 0 || position >= count) {
+                position = -1;
             }
         }
 
@@ -705,7 +754,7 @@ public class CoverFlowView extends ViewGroup {
     }
 
     private int convertPosition2Index(int position) {
-        return position - mSiblingCount;
+        return position - mGapBetweenPositionAndIndex;
     }
 
     public void setAdapter(ACoverFlowAdapter adapter) {
@@ -1032,9 +1081,9 @@ public class CoverFlowView extends ViewGroup {
 
     private void attemptSetOffset(float offset) {
         float old = mOffset;
-        if (!mLoopMode) {
-            int start = -mSiblingCount;
-            int end = mAdapter.getCount() - mSiblingCount - 1;
+        if (!mShouldLoop) {
+            int start = mLeftEdgeIndex;
+            int end = mRightEdgeIndex;
             if (offset < start) {
                 offset = start;
             } else if (offset > end) {
@@ -1095,7 +1144,7 @@ public class CoverFlowView extends ViewGroup {
         cancelTouch();
         resetOffset();
 
-        this.mLoopMode = loop;
+        this.mShouldLoop = this.mLoopMode = loop;
 
         mDataChanged = true;
         requestLayout();
@@ -1124,9 +1173,9 @@ public class CoverFlowView extends ViewGroup {
 
         float initOffset = mOffset;
         float targetOffset = initOffset + target;
-        if (!mLoopMode) { //target offset越界
-            int start = -mSiblingCount;
-            int end = mAdapter.getCount() - mSiblingCount - 1;
+        if (!mShouldLoop) { //target offset越界
+            int start = mLeftEdgeIndex;
+            int end = mRightEdgeIndex;
             if (targetOffset < start) {
                 return;
             } else if (targetOffset > end) {
@@ -1211,7 +1260,7 @@ public class CoverFlowView extends ViewGroup {
             //求出当前位置到达selection位置的最短路径
             int distance1 = selection - curPos;
 
-            if (mLoopMode) {
+            if (mShouldLoop) {
                 int distance2 = selection + count - curPos;
                 int distance3 = selection - count - curPos;
                 minDistance = Math.abs(distance1) < Math.abs(distance2) ? distance1 : distance2;
@@ -1254,15 +1303,7 @@ public class CoverFlowView extends ViewGroup {
 
     private int calculateOffsetDelta(float offset, int oldCount, int newCount) {
         int mid = (int) Math.floor(offset + 0.5);
-
-        int midPosition = mid + mSiblingCount;
-        while (midPosition < 0 || midPosition >= oldCount) {
-            if (midPosition < 0) {
-                midPosition += oldCount;
-            } else if (midPosition >= oldCount) {
-                midPosition -= oldCount;
-            }
-        }
+        int midPosition = convertIndex2Position(mid, oldCount);
 
         if (midPosition > newCount - 1) {
             midPosition = newCount - 1;
