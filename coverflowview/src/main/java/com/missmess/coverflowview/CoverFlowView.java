@@ -276,9 +276,10 @@ public class CoverFlowView extends ViewGroup {
             assertAdapterDataSetValidate();
 
             int count = adapter.getCount();
-            if (count == 0) {
+            if (count == 0)
                 return;
-            }
+            if (midAdapterPosition == -1)
+                return;
 
             SparseArray<View> temp = new SparseArray<>();
             for (int i = 0, j = (midAdapterPosition - mSiblingCount); i < mVisibleChildCount; ++i, ++j) {
@@ -372,6 +373,8 @@ public class CoverFlowView extends ViewGroup {
             mLeftEdgeIndex = -mSiblingCount;
             mRightEdgeIndex = mLeftEdgeIndex + count - 1;
         }
+        if (mRightEdgeIndex < mLeftEdgeIndex)
+            mRightEdgeIndex = mLeftEdgeIndex;
     }
 
     @Override
@@ -488,9 +491,7 @@ public class CoverFlowView extends ViewGroup {
             checkShouldLoopAndEdge();
 
             int adapterPosition = convertIndex2Position(mid);
-            if (adapterPosition != -1) {
-                applyLayoutChildren(true, adapterPosition);
-            }
+            applyLayoutChildren(true, adapterPosition);
             mDataChanged = false;
         } else {
             if (lastMidIndex + 1 == mid) { //右滑至item出现了
@@ -517,8 +518,10 @@ public class CoverFlowView extends ViewGroup {
                 }
 
                 int actuallyPositionMid = convertIndex2Position(mid);
-                View midView = showViewArray.get(actuallyPositionMid);
-                midView.bringToFront();
+                if (actuallyPositionMid != -1) {
+                    View midView = showViewArray.get(actuallyPositionMid);
+                    midView.bringToFront();
+                }
             } else if (lastMidIndex - 1 == mid) { //左滑至item出现了
                 assertAdapterDataSetValidate();
                 int actuallyPositionEnd = convertIndex2Position(lastMidIndex + rightCount);
@@ -543,8 +546,10 @@ public class CoverFlowView extends ViewGroup {
                 }
 
                 int actuallyPositionMid = convertIndex2Position(mid);
-                View midView = showViewArray.get(actuallyPositionMid);
-                midView.bringToFront();
+                if (actuallyPositionMid != -1) {
+                    View midView = showViewArray.get(actuallyPositionMid);
+                    midView.bringToFront();
+                }
             }
         }
 
@@ -704,7 +709,7 @@ public class CoverFlowView extends ViewGroup {
     /**
      * 获取顶部Item position
      *
-     * @return int
+     * @return int, -1表示没有
      */
     public int getTopViewPosition() {
         return convertIndex2Position(lastMidIndex);
@@ -803,7 +808,10 @@ public class CoverFlowView extends ViewGroup {
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 touchViewItem = getTopView();
-                isOnTopView = inRangeOfView(touchViewItem, event);
+                isOnTopView = false;
+                if (touchViewItem != null) {
+                    isOnTopView = inRangeOfView(touchViewItem, event);
+                }
                 // 如果触摸位置不在顶部view内，直接消费这个event。
                 handled = !isOnTopView;
                 break;
@@ -866,10 +874,11 @@ public class CoverFlowView extends ViewGroup {
                 }
 
                 removeLongClickAction();
-                if (isOnTopView && touchViewItem == getTopView()
+                View topView = getTopView();
+                if (isOnTopView && topView != null && touchViewItem == topView
                         && inRangeOfView(touchViewItem, event)) {
                     if (mTopViewClickLister != null) {
-                        mTopViewClickLister.onClick(getTopViewPosition(), getTopView());
+                        mTopViewClickLister.onClick(getTopViewPosition(), topView);
                     }
                 }
 
@@ -878,13 +887,13 @@ public class CoverFlowView extends ViewGroup {
                 touchEnded(event);
 
                 //不是点击top view。并且启用点击切换。并且点击了左右侧view
-                if (!isOnTopView && clickSwitchEnable
+                if (!isOnTopView && clickSwitchEnable && topView != null
                         && Math.abs(mTouchStartX - event.getX()) < mTouchSlop
                         && Math.abs(mTouchStartY - event.getY()) < mTouchSlop
                         && event.getEventTime() - event.getDownTime() < 500) {
-                    if (atLeftOfView(getTopView(), event)) {
+                    if (atLeftOfView(topView, event)) {
                         gotoPrevious();
-                    } else if (atRightOfView(getTopView(), event)) {
+                    } else if (atRightOfView(topView, event)) {
                         gotoForward();
                     }
                 }
@@ -1094,6 +1103,8 @@ public class CoverFlowView extends ViewGroup {
     }
 
     private boolean inRangeOfView(View view, MotionEvent ev) {
+        if (view == null)
+            return false;
         Rect frame = new Rect();
         getViewRect(view, frame);
         return frame.contains((int) ev.getX(), (int) ev.getY());
@@ -1255,6 +1266,8 @@ public class CoverFlowView extends ViewGroup {
         if (smooth) {
             float offset = mOffset;
             int curPos = convertIndex2Position((int) offset);
+            if (curPos == -1)
+                return;
 
             int minDistance;
             //求出当前位置到达selection位置的最短路径
@@ -1304,6 +1317,8 @@ public class CoverFlowView extends ViewGroup {
     private int calculateOffsetDelta(float offset, int oldCount, int newCount) {
         int mid = (int) Math.floor(offset + 0.5);
         int midPosition = convertIndex2Position(mid, oldCount);
+        if (midPosition == -1)
+            return 0;
 
         if (midPosition > newCount - 1) {
             midPosition = newCount - 1;
