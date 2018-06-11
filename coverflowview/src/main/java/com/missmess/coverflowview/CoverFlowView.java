@@ -161,6 +161,7 @@ public class CoverFlowView extends ViewGroup {
     private int mLeftEdgeIndex, mRightEdgeIndex;
     // index与position之间的通常的一个差值
     private int mGapBetweenPositionAndIndex;
+    private boolean isLaidOut;
 
     public CoverFlowView(Context context) {
         super(context);
@@ -570,6 +571,9 @@ public class CoverFlowView extends ViewGroup {
         }
 
         postViewOnTop();
+        if (!isLaidOut) {
+            isLaidOut = true;
+        }
     }
 
     private void postViewOnTop() {
@@ -739,6 +743,8 @@ public class CoverFlowView extends ViewGroup {
     }
 
     private int convertIndex2Position(int index, int count) {
+        if (!isLaidOut)
+            return index;
         int position = index + mGapBetweenPositionAndIndex;
 
         if (mShouldLoop) {
@@ -1315,6 +1321,9 @@ public class CoverFlowView extends ViewGroup {
     }
 
     private int calculateOffsetDelta(float offset, int oldCount, int newCount) {
+        if (oldCount == newCount) {
+            return 0;
+        }
         int mid = (int) Math.floor(offset + 0.5);
         int midPosition = convertIndex2Position(mid, oldCount);
         if (midPosition == -1)
